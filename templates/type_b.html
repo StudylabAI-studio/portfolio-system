@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>ポートフォリオ - {{ student_name }}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  @page { size: A4; margin: 0; }
+  body {
+    font-family: 'Noto Sans JP', sans-serif;
+    background: #FFFEF8;
+    width: 210mm; min-height: 297mm;
+    overflow: visible; position: relative;
+  }
+  {% if logo_b64 and logo_position == 'center' %}
+  .watermark {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    opacity: 0.06; z-index: 0; width: 220px; height: 220px; object-fit: contain;
+  }
+  {% endif %}
+  .page { width: 100%; min-height: 100%; display: flex; flex-direction: column; position: relative; z-index: 1; }
+
+  /* 賞状風外枠 */
+  .outer-border {
+    position: absolute; inset: 8px;
+    border: 3px solid #B8960C;
+    border-radius: 4px; pointer-events: none; z-index: 2;
+  }
+  .inner-border {
+    position: absolute; inset: 13px;
+    border: 1px solid #D4AF37;
+    border-radius: 2px; pointer-events: none; z-index: 2;
+  }
+
+  /* ヘッダー */
+  .header {
+    background: linear-gradient(180deg, #1A1A2E 0%, #16213E 100%);
+    padding: 20px 40px 16px;
+    text-align: center;
+    position: relative;
+  }
+  .header-deco {
+    font-family: 'Noto Serif JP', serif;
+    font-size: 9px; color: #D4AF37; letter-spacing: 0.3em;
+    text-transform: uppercase; margin-bottom: 6px;
+  }
+  .student-name {
+    font-family: 'Noto Serif JP', serif;
+    font-size: 26px; color: #FFFFFF; font-weight: 700;
+    letter-spacing: 0.1em;
+    text-shadow: 0 0 20px rgba(212,175,55,0.5);
+  }
+  .student-sub { font-size: 10px; color: #D4AF37; margin-top: 3px; }
+  {% if logo_b64 and logo_position == 'top_right' %}
+  .logo-top-right {
+    position: absolute; right: 30px; top: 50%; transform: translateY(-50%);
+    width: 50px; height: 50px; object-fit: contain;
+  }
+  {% endif %}
+
+  /* 金帯 */
+  .gold-bar {
+    background: linear-gradient(90deg, #B8960C, #D4AF37, #F5D78C, #D4AF37, #B8960C);
+    height: 6px;
+  }
+
+  /* 総合評価 */
+  .total-section {
+    background: linear-gradient(135deg, #1A1A2E, #16213E);
+    padding: 14px 40px;
+    display: flex; align-items: center; justify-content: center; gap: 30px;
+  }
+  .total-score-box {
+    text-align: center;
+  }
+  .total-label { font-size: 9px; color: #D4AF37; letter-spacing: 0.2em; }
+  .total-value { font-size: 36px; font-weight: 700; color: #F5D78C; font-family: 'Noto Serif JP', serif; }
+  .org-info { font-size: 9px; color: rgba(212,175,55,0.7); margin-top: 2px; }
+  .stars-gold { display: flex; gap: 4px; justify-content: center; margin-top: 4px; }
+  .star-gold { font-size: 18px; color: #D4AF37; }
+  .star-empty-g { font-size: 18px; color: rgba(212,175,55,0.3); }
+
+  /* 本文エリア */
+  .content { flex: 1; padding: 16px 36px; display: flex; flex-direction: column; gap: 12px; overflow: visible; }
+
+  .section-title {
+    font-family: 'Noto Serif JP', serif;
+    font-size: 11px; font-weight: 700; color: #B8960C;
+    letter-spacing: 0.15em; border-bottom: 1px solid #D4AF37; padding-bottom: 4px;
+    margin-bottom: 8px;
+  }
+
+  /* ルーブリック評価グリッド */
+  .rubric-grid { display: flex; flex-direction: column; gap: 7px; }
+  .rubric-item {
+    display: flex; flex-direction: column; gap: 4px;
+    background: linear-gradient(90deg, rgba(212,175,55,0.05), transparent);
+    padding: 7px 12px; border-radius: 6px;
+    border-left: 2px solid #D4AF37;
+  }
+  .rubric-header { display: flex; align-items: center; gap: 12px; }
+  .rubric-label { width: 110px; font-size: 11px; font-weight: 700; color: #37474F; flex-shrink: 0; }
+  .rubric-bar-area { flex: 1; }
+  .rubric-bar-bg { width: 100%; height: 8px; background: rgba(212,175,55,0.15); border-radius: 4px; overflow: hidden; }
+  .rubric-bar-fill {
+    height: 100%; border-radius: 4px;
+    background: linear-gradient(90deg, #B8960C, #F5D78C);
+  }
+  .rubric-stars { display: flex; gap: 2px; margin-top: 3px; }
+  .rubric-star { font-size: 11px; color: #D4AF37; }
+  .rubric-star-e { font-size: 11px; color: rgba(212,175,55,0.2); }
+  .rubric-score { font-size: 12px; font-weight: 700; color: #B8960C; width: 32px; text-align: right; flex-shrink: 0; }
+  .rubric-reason { font-size: 8px; color: #546E7A; line-height: 1.5; padding-left: 122px; margin-top: 2px; }
+  /* 部分塗り星 */
+  .star-partial-gold { display: inline-block; position: relative; color: rgba(212,175,55,0.2); font-size: 11px; }
+  .star-partial-gold::before { content: '★'; position: absolute; left:0; top:0; color: #D4AF37; overflow: hidden; width: var(--pct,50%); white-space: nowrap; }
+  .star-partial-top { display: inline-block; position: relative; color: rgba(212,175,55,0.2); font-size: 18px; }
+  .star-partial-top::before { content: '★'; position: absolute; left:0; top:0; color: #D4AF37; overflow: hidden; width: var(--pct,50%); white-space: nowrap; }
+
+  /* コメント */
+  .comment-box {
+    background: linear-gradient(135deg, rgba(212,175,55,0.06), rgba(212,175,55,0.02));
+    border: 1px solid rgba(212,175,55,0.3); border-radius: 8px;
+    padding: 12px 16px;
+  }
+  .comment-text { font-size: 9.5px; color: #455A64; line-height: 1.7; font-family: 'Noto Serif JP', serif; }
+
+  /* フッター */
+  .footer {
+    background: linear-gradient(180deg, #16213E, #1A1A2E);
+    padding: 8px 40px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .footer-text { color: rgba(212,175,55,0.6); font-size: 9px; letter-spacing: 0.1em; }
+</style>
+</head>
+<body>
+  {% if logo_b64 and logo_position == 'center' %}
+  <img class="watermark" src="{{ logo_b64 }}" alt="logo">
+  {% endif %}
+  <div class="outer-border"></div>
+  <div class="inner-border"></div>
+
+  <div class="page">
+    <div class="header">
+      <div class="header-deco">✦ {{ org_name if org_name else 'Portfolio Report' }} ✦</div>
+      <div class="student-name">{{ student_name }}</div>
+      <div class="student-sub">学習成長ポートフォリオ　Learning Achievement Report</div>
+      {% if logo_b64 and logo_position == 'top_right' %}
+      <img class="logo-top-right" src="{{ logo_b64 }}" alt="logo">
+      {% endif %}
+    </div>
+    <div class="gold-bar"></div>
+
+    <div class="total-section">
+      <div class="total-score-box">
+        <div class="total-label">◆ TOTAL ACHIEVEMENT SCORE ◆</div>
+        <div class="total-value">{{ "%.1f"|format(total_score) }} <span style="font-size:16px;color:#D4AF37;">/ 5.0</span></div>
+        <div class="stars-gold">
+          {% for i in range(total_stars.full) %}<span class="star-gold">★</span>{% endfor %}
+          {% if total_stars.has_partial %}<span class="star-partial-top" style="--pct:{{ total_stars.partial_pct }}%">★</span>{% endif %}
+          {% for i in range(total_stars.empty) %}<span class="star-empty-g">☆</span>{% endfor %}
+          <span style="font-size:11px;color:#F5D78C;margin-left:8px;font-weight:700;">{{ total_stars.pct }}%</span>
+        </div>
+        <div class="org-info">{{ org_name if org_name else '' }}</div>
+      </div>
+    </div>
+    <div class="gold-bar"></div>
+
+    <div class="content">
+      <!-- 評価項目 -->
+      <div>
+        <div class="section-title">◆ ルーブリック評価詳細</div>
+        <div class="rubric-grid">
+          {% for item in score_items %}
+          <div class="rubric-item">
+            <div class="rubric-header">
+              <div class="rubric-label">{{ item.label }}</div>
+              <div class="rubric-bar-area">
+                <div class="rubric-bar-bg">
+                  <div class="rubric-bar-fill" style="width: {{ item.stars.pct }}%;"></div>
+                </div>
+                <div class="rubric-stars">
+                  {% for i in range(item.stars.full) %}<span class="rubric-star">★</span>{% endfor %}
+                  {% if item.stars.has_partial %}<span class="star-partial-gold" style="--pct:{{ item.stars.partial_pct }}%">★</span>{% endif %}
+                  {% for i in range(item.stars.empty) %}<span class="rubric-star-e">☆</span>{% endfor %}
+                  <span style="font-size:9px;color:#90A4AE;margin-left:4px;">{{ item.stars.pct }}%</span>
+                </div>
+              </div>
+              <div class="rubric-score">{{ "%.1f"|format(item.score) }}</div>
+            </div>
+            <div class="rubric-reason">{{ item.reason if item.reason else '（コメントデータなし）' }}</div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- コメント -->
+      <div>
+        <div class="section-title">◆ 担当者コメント</div>
+        <div class="comment-box">
+          <div class="comment-text">{{ comment }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="gold-bar"></div>
+    <div class="footer">
+      <div class="footer-text">{{ org_name if org_name else '' }}</div>
+      <div class="footer-text">✦ Learning Portfolio System ✦</div>
+    </div>
+  </div>
+</body>
+</html>

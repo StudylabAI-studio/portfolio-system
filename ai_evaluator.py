@@ -1,0 +1,289 @@
+"""
+ai_evaluator.py
+Gemini API (google-genai SDK) を使って、
+生徒ライフログ x ルーブリック -> 評価結果CSV を自動生成するモジュール。
+生徒1人につき複数のライフログを結合して一括評価する。
+"""
+import time
+import re
+import csv
+import io
+import pandas as pd
+
+from google import genai
+from google.genai import types
+
+# ─── モデル一覧（現在利用可能な最新API） ───────────────
+AVAILABLE_MODELS = {
+    "gemini-3.1-flash-lite": "[推奨] Gemini 3.1 Flash Lite - 超高速・最新モデル",
+    "gemini-2.5-flash":      "Gemini 2.5 Flash - 高精度・安定",
+    "gemini-3.1-pro-preview":"Gemini 3.1 Pro Preview - 最高精度",
+}
+
+DEFAULT_MODEL = "gemini-3.1-flash-lite"
+
+FIXED_LABELS = ["自己管理", "思考力・探究心", "コミュニケーション", "主体性・行動力", "協働・共創力"]
+
+
+def build_evaluation_prompt(student_name: str, logs: list,
+                            rubric_text: str, use_rubric_items: bool = False) -> str:
+    """
+    1名分の評価プロンプトを生成する。
+    logs = [{"テーマ名": ..., "ライフログ内容": ..., "投稿日時": ...}, ...]
+    """
+    log_block = ""
+    for i, log in enumerate(logs, 1):
+        theme = log.get("テーマ名", "（テーマなし）")
+        content = log.get("ライフログ内容", "")
+        date = log.get("投稿日時", "")
+        if content and str(content) != "nan":
+            log_block += f"\n【ログ{i}】テーマ：{theme}　投稿日：{date}\n{content}\n"
+
+    if not log_block.strip():
+        log_block = "（ライフログの記録なし）"
+
+    if use_rubric_items:
+        output_instruction = """
+【出力形式】
+必ずCSV形式のみで回答してください（説明文・コードブロックは不要）。
+ヘッダー行とデータ行の2行だけを出力してください。
+
+【ヘッダー作成の厳密なルール】
+1. ヘッダーは必ず以下のように作成してください。
+   生徒名,総合評価,総合コメント,（実際の評価項目1）,（実際の評価項目1）_根拠,（実際の評価項目2）,（実際の評価項目2）_根拠,...
+2. 根拠コメントの列名は、必ず「評価項目名」に「_根拠」という文字を直接くっつけた名前にしてください（例：「課題発見_根拠」）。「根拠」という単体や別の名前はNGです。
+3. （最重要）データ行の各根拠コメントの中には、絶対に半角カンマ(,)を含めないでください。カンマは全角の「、」に置き換えてください。
+"""
+    else:
+        # "自己管理,自己管理_根拠,思考力・探究心,思考力・探究心_根拠,..." のように組み立てる
+        labels_and_reasons = []
+        for label in FIXED_LABELS:
+            labels_and_reasons.append(label)
+            labels_and_reasons.append(f"{label}_根拠")
+        labels_str = ",".join(labels_and_reasons)
+        
+        output_instruction = f"""
+【出力形式】
+必ずCSV形式のみで回答してください（説明文・コードブロックは不要）。
+ヘッダー行とデータ行の2行だけを出力してください。
+（最重要）データ行の各根拠コメントの中には、絶対に半角カンマ(,)を含めないでください。カンマは全角の「、」に置き換えてください。
+
+生徒名,総合評価,総合コメント,{labels_str}
+{student_name},3.8,ここに全体の総合コメントを書く,4.0,ここに自己管理の根拠コメントを書く,3.5,ここに思考力・探究心の根拠を書く,...
+"""
+
+    return f"""あなたは教育評価の専門家です。以下の生徒のライフログ（複数件）を総合的に読み解き、ルーブリックに基づいて評価してください。
+
+【ルーブリック（評価基準）】
+{rubric_text}
+
+【生徒名】
+{student_name}
+
+【ライフログ（全{len(logs)}件・時系列順）】
+{log_block}
+
+【評価ルール】
+- 全てのライフログを通読し、生徒の成長・傾向・特徴を把握してから評価してください
+- 各スコアは 1.0〜5.0 の範囲で 0.1 刻みで評価してください
+- 総合評価は全項目の平均として算出してください
+- 記録が少ない場合でも、書かれた内容から読み取れることを最大限評価してください
+
+【総合コメントの書き方（400文字程度）】
+- 生徒の全体的な成長や強みを具体的に述べる
+- ログの内容を引用しながら、どこが素晴らしいか伝える
+- 今後さらに伸ばすための具体的なポイントやアドバイスを2〜3点入れる
+- 応援や期待の気持ちを込めた締めの言葉で終える
+
+【各項目の根拠コメントの書き方（200文字以上）】
+- 必ずログの文章を「」で引用して根拠を示すこと
+- 引用後の解釈・評価は、以下の多様な表現からランダムに使い分けること（毎回同じ言い回しは避ける）：
+  ・「〇〇と記録していますね。これは△△の力が表れている証拠です」
+  ・「〇〇という記述から、△△に対する意識の高さが伝わってきます」
+  ・「〇〇と振り返っている点に、△△への成長が感じられます」
+  ・「〇〇という言葉が印象的です。ここには△△という姿勢が見えます」
+  ・「〇〇と書いているように、△△の面で着実に力をつけています」
+- さらに、今後どうすればより良くなるかのヒントも1文添えること
+- 定型的・機械的にならないよう、項目ごとに文体やトーンを変えること
+
+{output_instruction}
+""".strip()
+
+
+def evaluate_students_with_gemini(
+    students: list,
+    rubric_text: str,
+    api_key: str,
+    model_name: str = DEFAULT_MODEL,
+    use_rubric_items: bool = False,
+    progress_callback=None
+) -> tuple:
+    """
+    全生徒をGemini APIで自動評価する。
+
+    Args:
+        students : [{"name": "氏名", "logs": [...]}]
+        rubric_text : ルーブリックテキスト
+        api_key : Gemini APIキー
+        model_name : 使用するGeminiモデル名
+        use_rubric_items : ルーブリック項目をそのまま評価軸に使うか
+        progress_callback : (current, total, name) -> None
+
+    Returns:
+        (results, errors)
+    """
+    client = genai.Client(api_key=api_key)
+
+    results = []
+    errors = []
+    total = len(students)
+
+    for i, student in enumerate(students):
+        name = student["name"]
+        logs = student["logs"]
+
+        if progress_callback:
+            progress_callback(i, total, name)
+
+        try:
+            prompt = build_evaluation_prompt(
+                student_name=name,
+                logs=logs,
+                rubric_text=rubric_text,
+                use_rubric_items=use_rubric_items
+            )
+
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.3,
+                    top_p=0.95,
+                )
+            )
+            raw_text = response.text
+
+            parsed = _parse_gemini_csv(raw_text, name)
+            if parsed:
+                results.append(parsed)
+            else:
+                errors.append(f"{name}：CSV解析失敗 -> {raw_text[:100]}")
+                results.append({"生徒名": name, "総合評価": "3.0", "コメント": "（解析エラー）"})
+
+        except Exception as e:
+            errors.append(f"{name}：APIエラー -> {str(e)}")
+            results.append({"生徒名": name, "総合評価": "0", "コメント": f"エラー: {str(e)[:50]}"})
+
+        # レート制限対策
+        time.sleep(0.5)
+
+    if progress_callback:
+        progress_callback(total, total, "完了")
+
+    return results, errors
+
+
+def _parse_gemini_csv(raw_text: str, student_name: str) -> dict:
+    """GeminiのCSV出力テキストを解析してdictに変換。"""
+    # コードブロックを除去
+    code_block = re.search(r'```(?:csv)?\s*\n?(.*?)```', raw_text, re.DOTALL)
+    if code_block:
+        raw_text = code_block.group(1).strip()
+
+    lines = raw_text.strip().splitlines()
+    csv_lines = [l.strip() for l in lines if l.strip() and l.strip().count(',') >= 2]
+
+    if len(csv_lines) < 2:
+        return None
+
+    try:
+        reader = csv.reader(io.StringIO('\n'.join(csv_lines)))
+        rows = list(reader)
+        if len(rows) < 2: return None
+
+        headers = [h.strip() for h in rows[0]]
+        data = [v.strip() for v in rows[1]]
+
+        # ヘッダーの重複や「根拠」という曖昧な名前を補正する
+        # 例: ['課題発見', '根拠', '説明力', '根拠'] -> ['課題発見', '課題発見_根拠', '説明力', '説明力_根拠']
+        for i in range(len(headers)):
+            if headers[i] in ("根拠", "コメント", "理由", "根拠コメント"):
+                if i > 0 and headers[i-1] not in ("生徒名", "総合評価", "総合コメント", "コメント"):
+                    headers[i] = f"{headers[i-1]}_根拠"
+            elif headers[i].endswith("スコア"): # 万が一AIがスコアと付けた場合
+                headers[i] = headers[i].replace("スコア", "")
+
+        # 辞書化
+        cleaned = {}
+        for h, v in zip(headers, data):
+            if h:
+                cleaned[h] = v
+        
+        if "生徒名" not in cleaned or not cleaned["生徒名"]:
+            cleaned["生徒名"] = student_name
+            
+        return cleaned
+    except Exception:
+        return None
+
+    return None
+
+
+def group_logs_by_student(df) -> list:
+    """
+    DataFrameから生徒ごとにライフログをグループ化する。
+    Returns:
+        [{"name": "姓名", "user_id": ..., "logs": [...], "log_count": ..., "group": ...}]
+    """
+    students = []
+
+    if "ユーザーID" not in df.columns:
+        return students
+
+    for user_id, group in df.groupby("ユーザーID"):
+        first_row = group.iloc[0]
+        sei = str(first_row.get("姓", "")).strip() if pd.notna(first_row.get("姓")) else ""
+        mei = str(first_row.get("名", "")).strip() if pd.notna(first_row.get("名")) else ""
+        full_name = f"{sei}{mei}".strip() or f"ID:{user_id}"
+
+        # 投稿日時でソート
+        if "投稿日時" in group.columns:
+            group = group.sort_values("投稿日時")
+
+        logs = []
+        for _, row in group.iterrows():
+            content = row.get("ライフログ内容", "")
+            if pd.notna(content) and str(content).strip():
+                logs.append({
+                    "テーマ名": str(row.get("テーマ名", "")) if pd.notna(row.get("テーマ名")) else "",
+                    "ライフログ内容": str(content).strip(),
+                    "投稿日時": str(row.get("投稿日時", "")) if pd.notna(row.get("投稿日時")) else "",
+                    "メイングループ": str(row.get("メイングループ", "")) if pd.notna(row.get("メイングループ")) else "",
+                })
+
+        students.append({
+            "name": full_name,
+            "user_id": user_id,
+            "logs": logs,
+            "log_count": len(logs),
+            "group": logs[0].get("メイングループ", "") if logs else ""
+        })
+
+    return students
+
+
+def results_to_csv_bytes(results: list) -> bytes:
+    """評価結果をCSVバイト列に変換（BOM付きUTF-8 = Excel対応）"""
+    if not results:
+        return b""
+    all_keys = []
+    for r in results:
+        for k in r.keys():
+            if k not in all_keys:
+                all_keys.append(k)
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=all_keys, extrasaction='ignore')
+    writer.writeheader()
+    for r in results:
+        writer.writerow(r)
+    return buf.getvalue().encode('utf-8-sig')

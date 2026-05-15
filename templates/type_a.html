@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ポートフォリオ - {{ student_name }}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  @page { size: A4; margin: 0; }
+  body {
+    font-family: 'Noto Sans JP', 'Hiragino Sans', sans-serif;
+    background: #FAFBFF;
+    width: 210mm; min-height: 297mm;
+    overflow: visible;
+    position: relative;
+  }
+
+  /* 透かしロゴ（中央） */
+  {% if logo_b64 and logo_position == 'center' %}
+  .watermark {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    opacity: 0.07; z-index: 0;
+    width: 200px; height: 200px;
+    object-fit: contain;
+  }
+  {% endif %}
+
+  .page { width: 100%; min-height: 100%; display: flex; flex-direction: column; position: relative; z-index: 1; }
+
+  /* ヘッダー */
+  .header {
+    background: linear-gradient(135deg, #1565C0 0%, #1E88E5 50%, #42A5F5 100%);
+    padding: 18px 30px 16px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .header-left { display: flex; flex-direction: column; }
+  .org-name { color: rgba(255,255,255,0.8); font-size: 10px; font-weight: 500; letter-spacing: 0.1em; }
+  .system-label { color: rgba(255,255,255,0.7); font-size: 9px; margin-top: 2px; }
+  .header-center { text-align: center; }
+  .student-name { color: #FFFFFF; font-size: 22px; font-weight: 700; letter-spacing: 0.05em; }
+  .student-sub { color: rgba(255,255,255,0.8); font-size: 10px; margin-top: 3px; }
+  .header-right { text-align: right; }
+  {% if logo_b64 and logo_position == 'top_right' %}
+  .logo-top-right { width: 50px; height: 50px; object-fit: contain; }
+  {% endif %}
+
+  /* 総合評価バッジ */
+  .total-section {
+    background: linear-gradient(90deg, #E3F2FD, #FAFBFF);
+    padding: 14px 30px;
+    display: flex; align-items: center; gap: 20px;
+    border-bottom: 2px solid #E3F2FD;
+  }
+  .rank-badge {
+    width: 56px; height: 56px; border-radius: 50%;
+    background: {{ rank_color }};
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px; font-weight: 700; color: #FFFFFF;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    flex-shrink: 0;
+  }
+  .total-score-info { flex: 1; }
+  .total-label { font-size: 10px; color: #78909C; font-weight: 500; }
+  .total-value { font-size: 28px; font-weight: 700; color: #1565C0; }
+  .total-sub { font-size: 10px; color: #90A4AE; }
+  .stars-row { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
+  .star { font-size: 16px; }
+  .star-full { color: #FFB300; }
+  .star-half { color: #FFB300; }
+  .star-empty { color: #CFD8DC; }
+  .pct-badge {
+    background: #1565C0; color: white;
+    font-size: 11px; font-weight: 700;
+    padding: 3px 10px; border-radius: 20px; margin-left: 8px;
+  }
+
+  /* 部分塗り星 */
+  .star-partial {
+    display: inline-block; position: relative;
+    color: #CFD8DC; font-size: 16px;
+  }
+  .star-partial::before {
+    content: '★';
+    position: absolute; left: 0; top: 0;
+    color: #FFB300;
+    overflow: hidden;
+    width: var(--pct, 50%);
+    white-space: nowrap;
+  }
+  .mini-star-partial {
+    display: inline-block; position: relative;
+    color: #CFD8DC; font-size: 10px;
+  }
+  .mini-star-partial::before {
+    content: '★';
+    position: absolute; left: 0; top: 0;
+    color: #FFB300;
+    overflow: hidden;
+    width: var(--pct, 50%);
+    white-space: nowrap;
+  }
+
+  /* メインコンテンツ */
+  .content { display: flex; flex: 1; gap: 0; overflow: visible; }
+
+  /* 左側：レーダーチャート */
+  .left-panel {
+    width: 48%; padding: 16px 12px 16px 28px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .section-title {
+    font-size: 11px; font-weight: 700; color: #1565C0;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    border-left: 3px solid #42A5F5; padding-left: 8px;
+    margin-bottom: 6px;
+  }
+  .chart-wrapper {
+    background: #F0F4FF; border-radius: 12px;
+    padding: 10px; display: flex; justify-content: center;
+  }
+  .chart-wrapper img { width: 100%; max-width: 240px; }
+
+  /* 右側：評価項目リスト */
+  .right-panel {
+    width: 52%; padding: 16px 28px 16px 12px;
+    display: flex; flex-direction: column; gap: 8px;
+    border-left: 1px solid #E3F2FD;
+  }
+  .score-item {
+    background: #FFFFFF; border-radius: 10px;
+    padding: 8px 12px;
+    box-shadow: 0 1px 4px rgba(21,101,192,0.08);
+  }
+  .score-item-header { display: flex; justify-content: space-between; align-items: center; }
+  .score-label { font-size: 11px; font-weight: 700; color: #37474F; }
+  .score-val { font-size: 13px; font-weight: 700; color: #1565C0; }
+  .score-bar-bg {
+    width: 100%; height: 4px; background: #E3F2FD; border-radius: 2px;
+    margin-top: 4px; margin-bottom: 4px; overflow: hidden;
+  }
+  .score-bar-fill {
+    height: 100%; border-radius: 2px;
+    background: linear-gradient(90deg, #1565C0, #42A5F5);
+    transition: width 0.3s;
+  }
+  .score-reason { font-size: 8px; color: #546E7A; line-height: 1.5; text-align: justify; margin-top: 3px; }
+
+  /* コメント欄 */
+  .comment-section {
+    background: linear-gradient(135deg, #E8F5E9, #F1F8E9);
+    margin: 8px 22px;
+    padding: 14px 18px;
+    border-radius: 12px;
+    border-left: 4px solid #66BB6A;
+  }
+  .comment-title { font-size: 10px; font-weight: 700; color: #2E7D32; margin-bottom: 5px; }
+  .comment-text { font-size: 9.5px; color: #37474F; line-height: 1.7; }
+
+  /* フッター */
+  .footer {
+    background: #1565C0; padding: 8px 28px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .footer-text { color: rgba(255,255,255,0.7); font-size: 9px; }
+</style>
+</head>
+<body>
+  {% if logo_b64 and logo_position == 'center' %}
+  <img class="watermark" src="{{ logo_b64 }}" alt="logo">
+  {% endif %}
+
+  <div class="page">
+    <!-- ヘッダー -->
+    <div class="header">
+      <div class="header-left">
+        <div class="org-name">{{ org_name if org_name else 'PORTFOLIO REPORT' }}</div>
+        <div class="system-label">学習成長記録 / Learning Portfolio</div>
+      </div>
+      <div class="header-center">
+        <div class="student-name">{{ student_name }}</div>
+        <div class="student-sub">学習ポートフォリオ</div>
+      </div>
+      <div class="header-right">
+        {% if logo_b64 and logo_position == 'top_right' %}
+        <img class="logo-top-right" src="{{ logo_b64 }}" alt="logo">
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- 総合評価 -->
+    <div class="total-section">
+      <div class="rank-badge">{{ rank }}</div>
+      <div class="total-score-info">
+        <div class="total-label">TOTAL SCORE</div>
+        <div class="total-value">{{ "%.1f"|format(total_score) }} <span style="font-size:14px;color:#90A4AE;">/ 5.0</span></div>
+        <div class="stars-row">
+          {% for i in range(total_stars.full) %}<span class="star star-full">★</span>{% endfor %}
+          {% if total_stars.has_partial %}<span class="star-partial" style="--pct:{{ total_stars.partial_pct }}%">★</span>{% endif %}
+          {% for i in range(total_stars.empty) %}<span class="star star-empty">★</span>{% endfor %}
+          <span class="pct-badge">{{ total_stars.pct }}%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- メインコンテンツ -->
+    <div class="content">
+      <!-- 左パネル：チャート -->
+      <div class="left-panel">
+        <div>
+          <div class="section-title">📊 能力レーダーチャート</div>
+          <div class="chart-wrapper">
+            {% if chart_b64 %}
+            <img src="{{ chart_b64 }}" alt="radar chart">
+            {% else %}
+            <div style="color:#90A4AE;font-size:11px;padding:40px;">チャートなし</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- 右パネル：評価項目 -->
+      <div class="right-panel">
+        <div class="section-title">📈 評価項目詳細</div>
+        {% for item in score_items %}
+        <div class="score-item">
+          <div class="score-item-header">
+            <div class="score-label">{{ item.label }}</div>
+            <div class="score-val">{{ "%.1f"|format(item.score) }}</div>
+          </div>
+          <div class="score-bar-bg">
+            <div class="score-bar-fill" style="width: {{ item.stars.pct }}%;"></div>
+          </div>
+          <div class="mini-stars">
+            {% for i in range(item.stars.full) %}<span class="mini-star" style="color:#FFB300;">★</span>{% endfor %}
+            {% if item.stars.has_partial %}<span class="mini-star-partial" style="--pct:{{ item.stars.partial_pct }}%">★</span>{% endif %}
+            {% for i in range(item.stars.empty) %}<span class="mini-star" style="color:#CFD8DC;">★</span>{% endfor %}
+            <span style="font-size:9px;color:#90A4AE;margin-left:4px;">{{ item.stars.pct }}%</span>
+          </div>
+          <div class="score-reason">{{ item.reason if item.reason else '（コメントデータなし）' }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- コメント -->
+    <div class="comment-section">
+      <div class="comment-title">💬 コメント・フィードバック</div>
+      <div class="comment-text">{{ comment }}</div>
+    </div>
+
+    <!-- フッター -->
+    <div class="footer">
+      <div class="footer-text">{{ org_name if org_name else '' }}</div>
+      <div class="footer-text">Learning Portfolio System</div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>Premium C - {{ student_name }}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;700&family=Orbitron:wght@400;700&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  @page { size: A4; margin: 0; }
+  body {
+    font-family: 'Noto Sans JP', sans-serif;
+    background: #080C14;
+    width: 210mm; min-height: 297mm;
+    overflow: visible; color: #C9D8E8;
+  }
+  {% if logo_b64 and logo_position == 'center' %}
+  .watermark {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    opacity: 0.06; z-index: 0; width: 200px; height: 200px; object-fit: contain;
+  }
+  {% endif %}
+
+  /* 背景グラデーション */
+  .bg {
+    position: absolute; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(ellipse 70% 50% at 50% 0%, rgba(100,181,246,0.08) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 30% at 10% 90%, rgba(192,192,220,0.06) 0%, transparent 60%),
+      linear-gradient(180deg, #0A1020 0%, #080C14 100%);
+  }
+
+  /* シルバーライン */
+  .silver-line { height: 2px; background: linear-gradient(90deg, transparent, #C0C8D4, #E8EEF4, #C0C8D4, transparent); }
+  .silver-line-thin { height: 1px; background: linear-gradient(90deg, transparent, rgba(192,200,212,0.4), transparent); }
+
+  .page { width: 100%; height: 100%; display: flex; flex-direction: column; position: relative; z-index: 1; }
+
+  /* ヘッダー */
+  .header {
+    padding: 20px 36px 16px; text-align: center; position: relative;
+  }
+  .header-code {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 8px; color: rgba(192,200,212,0.5); letter-spacing: 0.4em; margin-bottom: 10px;
+  }
+  .student-name {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 26px; font-weight: 700; color: #E8EEF4;
+    letter-spacing: 0.15em;
+    text-shadow: 0 0 30px rgba(192,200,212,0.3);
+  }
+  .name-line {
+    width: 120px; height: 1px;
+    background: linear-gradient(90deg, transparent, #C0C8D4, transparent);
+    margin: 8px auto;
+  }
+  .student-sub { font-size: 9px; color: rgba(192,200,212,0.5); letter-spacing: 0.3em; }
+  {% if logo_b64 and logo_position == 'top_right' %}
+  .logo-top-right {
+    position: absolute; right: 30px; top: 50%; transform: translateY(-50%);
+    width: 50px; height: 50px; object-fit: contain; opacity: 0.8;
+  }
+  {% endif %}
+  .org-tag {
+    position: absolute; left: 36px; top: 50%; transform: translateY(-50%);
+    font-size: 9px; color: rgba(192,200,212,0.5); letter-spacing: 0.15em;
+  }
+
+  /* 総合スコア */
+  .total-zone {
+    padding: 12px 36px;
+    display: flex; align-items: center; justify-content: center; gap: 30px;
+  }
+  .hexagon-score {
+    width: 72px; height: 72px; position: relative;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    background: rgba(192,200,212,0.08);
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  }
+  .hex-inner { text-align: center; }
+  .hex-num { font-size: 22px; font-weight: 700; color: #E8EEF4; line-height: 1.1; }
+  .hex-denom { font-size: 9px; color: rgba(192,200,212,0.5); }
+  .score-detail { text-align: center; }
+  .sd-label { font-size: 9px; color: rgba(192,200,212,0.5); letter-spacing: 0.2em; margin-bottom: 4px; }
+  .sd-rank { font-size: 40px; font-weight: 700; color: {{ rank_color }}; line-height: 1; font-family: 'Orbitron', sans-serif; }
+  .sd-pct {
+    display: inline-block; background: rgba(192,200,212,0.1);
+    border: 1px solid rgba(192,200,212,0.3);
+    color: #C0C8D4; font-size: 10px; font-weight: 700;
+    padding: 2px 12px; border-radius: 20px; margin-top: 4px;
+  }
+  .silver-stars { display: flex; gap: 5px; justify-content: center; margin-top: 5px; }
+  .ss { font-size: 18px; color: #C0C8D4; text-shadow: 0 0 6px rgba(192,200,212,0.4); }
+  .ss-e { font-size: 18px; color: rgba(192,200,212,0.15); }
+  /* 部分塗り星 */
+  .ss-partial { display: inline-block; position: relative; color: rgba(192,200,212,0.15); font-size: 18px; }
+  .ss-partial::before { content: '★'; position: absolute; left:0; top:0; color: #C0C8D4; overflow: hidden; width: var(--pct,50%); white-space: nowrap; }
+
+  /* コンテンツ */
+  .content { flex: 1; display: flex; padding: 14px 28px; gap: 16px; overflow: visible; }
+  .left-col { width: 45%; }
+  .right-col { width: 55%; display: flex; flex-direction: column; gap: 8px; }
+
+  .panel-label { font-size: 9px; color: #C0C8D4; letter-spacing: 0.25em; font-family: 'Orbitron', sans-serif; margin-bottom: 8px; }
+  .chart-wrap {
+    background: rgba(192,200,212,0.04);
+    border: 1px solid rgba(192,200,212,0.12);
+    border-radius: 10px; padding: 8px;
+  }
+  .chart-wrap img { width: 100%; }
+
+  /* スコア項目 */
+  .score-item {
+    background: rgba(192,200,212,0.04);
+    border: 1px solid rgba(192,200,212,0.1);
+    border-radius: 8px; padding: 6px 10px; flex-shrink: 0; margin-bottom: 4px;
+  }
+  .si-row { display: flex; justify-content: space-between; margin-bottom: 2px; align-items: center; }
+  .si-label { font-size: 11px; color: #C9D8E8; font-weight: 500; }
+  .si-val { font-size: 12px; font-weight: 700; color: #E8EEF4; }
+  .si-bg { height: 4px; background: rgba(192,200,212,0.1); border-radius: 2px; overflow: hidden; margin-bottom: 4px; }
+  .si-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, #8090A8, #C0C8D4); }
+  .si-reason { font-size: 8px; color: #A0B0C0; line-height: 1.5; text-align: justify; margin-top: 3px; }
+
+  /* コメント */
+  .comment-zone { margin: 0 24px; }
+  .comment-box {
+    background: rgba(192,200,212,0.04);
+    border: 1px solid rgba(192,200,212,0.15);
+    border-left: 2px solid #C0C8D4;
+    border-radius: 8px; padding: 10px 16px;
+  }
+  .cb-title { font-size: 9px; color: #C0C8D4; letter-spacing: 0.2em; font-family: 'Orbitron', sans-serif; margin-bottom: 3px; }
+  .cb-text { font-size: 10.5px; color: #A0B0C0; line-height: 1.6; }
+
+  /* フッター */
+  .footer { padding: 8px 36px; display: flex; justify-content: space-between; align-items: center; }
+  .footer-text { font-size: 9px; color: rgba(192,200,212,0.3); letter-spacing: 0.1em; font-family: 'Orbitron', sans-serif; }
+</style>
+</head>
+<body>
+  {% if logo_b64 and logo_position == 'center' %}
+  <img class="watermark" src="{{ logo_b64 }}" alt="logo">
+  {% endif %}
+  <div class="bg"></div>
+
+  <div class="page">
+    <div class="silver-line"></div>
+    <div class="header">
+      <div class="org-tag">{{ org_name if org_name else 'PORTFOLIO' }}</div>
+      <div class="header-code">◈ PREMIUM PORTFOLIO ◈</div>
+      <div class="student-name">{{ student_name }}</div>
+      <div class="name-line"></div>
+      <div class="student-sub">LEARNING ACHIEVEMENT PORTFOLIO</div>
+      {% if logo_b64 and logo_position == 'top_right' %}
+      <img class="logo-top-right" src="{{ logo_b64 }}" alt="logo">
+      {% endif %}
+    </div>
+    <div class="silver-line-thin"></div>
+
+    <div class="total-zone">
+      <div class="hexagon-score">
+        <div class="hex-inner">
+          <div class="hex-num">{{ "%.1f"|format(total_score) }}</div>
+          <div class="hex-denom">/ 5.0</div>
+        </div>
+      </div>
+      <div class="score-detail">
+        <div class="sd-label">PERFORMANCE RANK</div>
+        <div class="sd-rank">{{ rank }}</div>
+        <div class="sd-pct">{{ total_stars.pct }}% ACHIEVED</div>
+      </div>
+      <div class="silver-stars">
+        {% for i in range(total_stars.full) %}<span class="ss">★</span>{% endfor %}
+        {% if total_stars.has_partial %}<span class="ss-partial" style="--pct:{{ total_stars.partial_pct }}%">★</span>{% endif %}
+        {% for i in range(total_stars.empty) %}<span class="ss-e">☆</span>{% endfor %}
+      </div>
+    </div>
+    <div class="silver-line-thin"></div>
+
+    <div class="content">
+      <div class="left-col">
+        <div class="panel-label">RADAR</div>
+        <div class="chart-wrap">
+          {% if chart_b64 %}
+          <img src="{{ chart_b64 }}" alt="radar">
+          {% endif %}
+        </div>
+      </div>
+      <div class="right-col">
+        <div class="panel-label">SCORES</div>
+        {% for item in score_items %}
+        <div class="score-item">
+          <div class="si-row">
+            <div class="si-label">{{ item.label }}</div>
+            <div class="si-val">{{ "%.1f"|format(item.score) }}</div>
+          </div>
+          <div class="si-bg">
+            <div class="si-fill" style="width:{{ item.stars.pct }}%;"></div>
+          </div>
+          <div class="si-reason">{{ item.reason if item.reason else '（コメントデータなし）' }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="comment-zone">
+      <div class="comment-box">
+        <div class="cb-title">COMMENT</div>
+        <div class="cb-text">{{ comment }}</div>
+      </div>
+    </div>
+
+    <div class="silver-line-thin" style="margin-top:10px;"></div>
+    <div class="footer">
+      <div class="footer-text">{{ org_name if org_name else '' }}</div>
+      <div class="footer-text">◈ PREMIUM SYSTEM ◈</div>
+    </div>
+    <div class="silver-line"></div>
+  </div>
+</body>
+</html>

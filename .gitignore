@@ -1,0 +1,12 @@
+# APIキー・秘密情報
+.env
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# 一時ファイル
+*.zip
+csv_analysis.txt
