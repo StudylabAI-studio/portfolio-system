@@ -9,4 +9,3 @@ google-genai
 pdfplumber
 python-docx
 python-dotenv
-weasyprint

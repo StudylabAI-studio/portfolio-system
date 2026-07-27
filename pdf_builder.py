@@ -26,17 +26,8 @@ DEFAULT_SCORE_LABELS = ["自己管理", "思考力・探究心", "コミュニ�
 def _html_to_pdf(html_content: str) -> bytes:
     """
     HTML文字列をPDFバイト列に変換する。
-    weasyprint を優先し、失敗時はPlaywrightにフォールバックする。
+    ローカル環境のPlaywrightを使用。Streamlit Cloudでは非対応としてエラーを返す。
     """
-    # まず weasyprint を試みる（クラウド・ローカル共通）
-    try:
-        from weasyprint import HTML, CSS
-        pdf_bytes = HTML(string=html_content, base_url=str(TEMPLATES_DIR)).write_pdf()
-        return pdf_bytes
-    except Exception:
-        pass
-
-    # フォールバック: Playwright（ローカル環境のみ）
     try:
         from playwright.sync_api import sync_playwright
         with sync_playwright() as p:
@@ -51,8 +42,12 @@ def _html_to_pdf(html_content: str) -> bytes:
             )
             browser.close()
         return pdf_bytes
+    except ImportError:
+        # Streamlit Cloud等、Playwrightがインストールされていない環境用
+        raise RuntimeError("【クラウド環境制限】このデモ版ではPDF一括生成機能は利用できません。評価ダッシュボードのみご利用いただけます。")
     except Exception as e:
         raise RuntimeError(f"PDF生成に失敗しました: {e}")
+
 
 
 
