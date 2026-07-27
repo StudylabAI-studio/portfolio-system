@@ -199,3 +199,80 @@ def generate_radar_chart_light(labels: list, scores: list, max_score: float = 5.
     buf.seek(0)
     img_b64 = base64.b64encode(buf.read()).decode('utf-8')
     return f"data:image/png;base64,{img_b64}"
+
+
+def generate_rpg_chart(labels: list, scores: list, is_dark: bool = False) -> str:
+    """
+    小学生向けRPG風ステータス（5項目）のレーダーチャートを生成する。
+    MAX100を前提とし、ゲーム風のポップなデザインで描画。
+    """
+    if not labels or not scores or len(labels) < 5:
+        return ""
+    
+    # 最初の5項目だけ使用
+    labels = labels[:5]
+    scores = [min(100.0, max(0.0, float(s))) for s in scores[:5]]
+    max_score = 100.0
+    N = 5
+
+    scores_norm = [s / max_score for s in scores]
+    angles = [n / float(N) * 2 * math.pi for n in range(N)]
+    angles_plot = angles + [angles[0]]
+    scores_plot = scores_norm + [scores_norm[0]]
+
+    bg_color = '#1A1A24' if is_dark else '#F0F4F8'
+    grid_color = '#4A4A6A' if is_dark else '#B0BEC5'
+    fill_color = '#FF4081'  # ポップなピンク系
+    line_color = '#FF80AB'
+    text_color = '#FFFFFF' if is_dark else '#37474F'
+
+    fig = plt.figure(figsize=(4.5, 4.5), facecolor=bg_color)
+    ax = fig.add_subplot(111, polar=True, facecolor=bg_color)
+    
+    # 頂点を上に（三角形が上を向くように）
+    ax.set_theta_offset(math.pi / 2)
+    ax.set_theta_direction(-1)
+
+    # グリッド（25, 50, 75, 100）
+    levels = [0.25, 0.5, 0.75, 1.0]
+    for level in levels:
+        ax.plot(angles + [angles[0]], [level] * (N + 1),
+                color=grid_color, linewidth=1.5, linestyle='--', alpha=0.7)
+
+    # スポークライン
+    for angle in angles:
+        ax.plot([angle, angle], [0, 1], color=grid_color, linewidth=1.5, alpha=0.7)
+
+    # データ描画
+    ax.fill(angles_plot[:-1], scores_plot[:-1], alpha=0.3, color=fill_color)
+    ax.plot(angles_plot, scores_plot, color=line_color, linewidth=3)
+    
+    # 頂点マーカー（星型など）
+    ax.scatter(angles, scores_norm, s=150, marker='*', color='#FFD54F', zorder=5, edgecolors='#FF6F00', linewidth=1.5)
+
+    # ラベルと数値
+    ax.set_xticks(angles)
+    label_texts = [f"{l}\n{int(s)}" for l, s in zip(labels, scores)]
+    
+    font_props = {}
+    if JP_FONT:
+        font_props['fontfamily'] = JP_FONT
+
+    ax.set_xticklabels(label_texts, color=text_color, fontsize=10, fontweight='bold', **font_props)
+
+    ax.set_ylim(0, 1)
+    ax.set_yticks([])
+    ax.yaxis.set_visible(False)
+    ax.spines['polar'].set_visible(False)
+    ax.grid(False)
+    ax.set_frame_on(False)
+
+    plt.tight_layout(pad=1.0)
+    
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=150, bbox_inches='tight', facecolor=bg_color, transparent=False)
+    plt.close(fig)
+    buf.seek(0)
+    img_b64 = base64.b64encode(buf.read()).decode('utf-8')
+    return f"data:image/png;base64,{img_b64}"
+

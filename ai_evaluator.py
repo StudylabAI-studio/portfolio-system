@@ -26,10 +26,12 @@ FIXED_LABELS = ["自己管理", "思考力・探究心", "コミュニケーシ�
 
 
 def build_evaluation_prompt(student_name: str, logs: list,
-                            rubric_text: str, use_rubric_items: bool = False) -> str:
+                            rubric_text: str, use_rubric_items: bool = False,
+                            target_grade: str = "中学生") -> str:
     """
     1名分の評価プロンプトを生成する。
     logs = [{"テーマ名": ..., "ライフログ内容": ..., "投稿日時": ...}, ...]
+    target_grade に応じて、RPGステータスや進路提案のカラムを付与する。
     """
     log_block = ""
     for i, log in enumerate(logs, 1):
@@ -42,15 +44,51 @@ def build_evaluation_prompt(student_name: str, logs: list,
     if not log_block.strip():
         log_block = "（ライフログの記録なし）"
 
+    # 学年による追加カラムと追加プロンプト
+    extra_columns = ""
+    extra_example = ""
+    extra_instruction = ""
+    if target_grade == "小学生":
+        extra_columns = ",隠れジョブ,ステータス1名,ステータス1値,ステータス2名,ステータス2値,ステータス3名,ステータス3値,ステータス4名,ステータス4値,ステータス5名,ステータス5値,スキル1名,スキル1効果,スキル2名,スキル2効果,鑑定書"
+        extra_example = ",パラディン ＋ 迷える班員を導く鉄壁の盾,ワクワク探求力,95,するどいツッコミ度,80,コツコツ経験値稼ぎ力,90,みんなを守る防御力,85,ひらめき魔法力,75,鉄壁のディフェンス,「〇〇をサポートした」という言葉から分析。仲間のピンチを救う効果がある,アイデアスパーク,「〇〇を思いついた」という言葉から分析。新しい視点で問題を解決する,君はいつも仲間を助けながら、地道な努力を欠かさない素晴らしい才能の持ち主だ。この調子で冒険を続けよう！"
+        extra_instruction = """
+【小学生向け特別分析（RPG風）】
+あなたは、子どもたちの隠れた才能を見抜く「異世界のギルドマスター」であり、同時に「優秀なデータアナリスト」です。
+入力された児童生徒の振り返り・コメントテキストを自然言語処理の視点で分析し、その子の性格、思考の癖、行動パターンを抽出した上で、ワクワクするようなRPG風の「隠れジョブ」と「オリジナルステータス」を生成してください。
+
+以下のステップで思考し、出力に反映させてください。
+1. 【抽出】テキストから「ポジティブな感情の表出」「他者との関わり方（協調・牽引・支援など）」「課題解決へのアプローチ（直感・論理・忍耐など）」を抽出する。
+2. 【変換】抽出した要素を、RPGの概念（物理攻撃、魔法、防御、回復、探索、テイマーなど）にマッピングする。
+3. 【命名】生徒が思わず友達と見せ合いたくなるような、ユニークで肯定的な「ジョブ名」と「パラメータ名」を生成する。
+4. 【出力ルール】口調は威厳がありつつも優しいギルドマスターのトーン。ネガティブな表現は一切使わず、全て「独自の強み」として肯定的に変換すること。
+
+CSVの各列には以下の内容を必ず出力してください：
+・隠れジョブ: [ベース職業] ＋ [テキストから抽出した独自の二つ名] （例：パラディン ＋ 迷える班員を導く鉄壁の盾）
+・ステータス1名〜5名: テキストの分析結果から作成した独自パラメータ名（例：ワクワク探求力）
+・ステータス1値〜5値: 上記に対応する数値（1〜99）
+・スキル1名〜2名: 具体的な記述に基づいたオリジナルパッシブスキル名
+・スキル1効果〜2効果: その効果の解説（テキストの「〜〜」という言葉から分析。〇〇の効果がある）
+・鑑定書: なぜこのジョブとステータスになったのか、テキストの分析結果を交えたギルドマスターからの熱い鑑定メッセージ（200文字程度）
+"""
+    else:
+        extra_columns = ",おすすめ学部,学部理由,おすすめ職業,職業理由"
+        extra_example = ",情報学部,プログラミングへの関心が高いから,データサイエンティスト,分析力が活かせるから"
+        extra_instruction = f"""
+【{target_grade}向け特別分析】
+生徒の性格や特徴を分析し、将来の進路提案を行ってください。
+1. おすすめの大学学部（例：経済学部、情報学部など）とその理由
+2. おすすめの職業（例：システムエンジニア、企画営業など）とその理由
+"""
+
     if use_rubric_items:
-        output_instruction = """
+        output_instruction = f"""
 【出力形式】
 必ずCSV形式のみで回答してください（説明文・コードブロックは不要）。
 ヘッダー行とデータ行の2行だけを出力してください。
 
 【ヘッダー作成の厳密なルール】
 1. ヘッダーは必ず以下のように作成してください。
-   生徒名,総合評価,総合コメント,（実際の評価項目1）,（実際の評価項目1）_根拠,（実際の評価項目2）,（実際の評価項目2）_根拠,...
+   生徒名,総合評価,総合コメント,（実際の評価項目1）,（実際の評価項目1）_根拠,（実際の評価項目2）,（実際の評価項目2）_根拠,...{extra_columns}
 2. 根拠コメントの列名は、必ず「評価項目名」に「_根拠」という文字を直接くっつけた名前にしてください（例：「課題発見_根拠」）。「根拠」という単体や別の名前はNGです。
 3. （最重要）データ行の各根拠コメントの中には、絶対に半角カンマ(,)を含めないでください。カンマは全角の「、」に置き換えてください。
 """
@@ -68,8 +106,8 @@ def build_evaluation_prompt(student_name: str, logs: list,
 ヘッダー行とデータ行の2行だけを出力してください。
 （最重要）データ行の各根拠コメントの中には、絶対に半角カンマ(,)を含めないでください。カンマは全角の「、」に置き換えてください。
 
-生徒名,総合評価,総合コメント,{labels_str}
-{student_name},3.8,ここに全体の総合コメントを書く,4.0,ここに自己管理の根拠コメントを書く,3.5,ここに思考力・探究心の根拠を書く,...
+生徒名,総合評価,総合コメント,{labels_str}{extra_columns}
+{student_name},3.8,ここに全体の総合コメントを書く,4.0,ここに自己管理の根拠コメントを書く,3.5,ここに思考力・探究心の根拠を書く,...{extra_example}
 """
 
     return f"""あなたは教育評価の専門家です。以下の生徒のライフログ（複数件）を総合的に読み解き、ルーブリックに基づいて評価してください。
@@ -106,6 +144,8 @@ def build_evaluation_prompt(student_name: str, logs: list,
 - さらに、今後どうすればより良くなるかのヒントも1文添えること
 - 定型的・機械的にならないよう、項目ごとに文体やトーンを変えること
 
+{extra_instruction}
+
 {output_instruction}
 """.strip()
 
@@ -116,7 +156,8 @@ def evaluate_students_with_gemini(
     api_key: str,
     model_name: str = DEFAULT_MODEL,
     use_rubric_items: bool = False,
-    progress_callback=None
+    progress_callback=None,
+    target_grade: str = "中学生"
 ) -> tuple:
     """
     全生徒をGemini APIで自動評価する。
@@ -128,6 +169,7 @@ def evaluate_students_with_gemini(
         model_name : 使用するGeminiモデル名
         use_rubric_items : ルーブリック項目をそのまま評価軸に使うか
         progress_callback : (current, total, name) -> None
+        target_grade : 学年カテゴリ（小学生/中学生/高校生）
 
     Returns:
         (results, errors)
@@ -150,7 +192,8 @@ def evaluate_students_with_gemini(
                 student_name=name,
                 logs=logs,
                 rubric_text=rubric_text,
-                use_rubric_items=use_rubric_items
+                use_rubric_items=use_rubric_items,
+                target_grade=target_grade
             )
 
             response = client.models.generate_content(

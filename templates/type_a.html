@@ -164,6 +164,21 @@
     display: flex; justify-content: space-between; align-items: center;
   }
   .footer-text { color: rgba(255,255,255,0.7); font-size: 9px; }
+  /* 印刷用改ページ設定 */
+  @media print {
+    body, html { height: auto !important; min-height: auto !important; }
+    .page {
+      height: 297mm !important;
+      max-height: 297mm !important;
+      page-break-after: always !important;
+      break-after: page !important;
+      overflow: hidden !important;
+    }
+    .page:last-of-type {
+      page-break-after: auto !important;
+      break-after: auto !important;
+    }
+  }
 </style>
 </head>
 <body>
@@ -252,6 +267,79 @@
 
     <!-- フッター -->
     <div class="footer">
+      <div class="footer-text">{{ org_name if org_name else '' }}</div>
+      <div class="footer-text">Learning Portfolio System</div>
+    </div>
+  </div>
+
+  <!-- 2ページ目：分析レポート -->
+  <div class="page" style="page-break-before: always; padding-top: 40px; min-height: 297mm; display: flex; flex-direction: column;">
+    <div style="text-align: center; margin-bottom: 30px;">
+      <h2 style="color: #1565C0; margin-bottom: 5px; font-size: 24px; letter-spacing: 0.1em;">AI適性分析レポート</h2>
+      <div style="color: #455A8A; font-size: 12px;">{{ student_name }} さんの強みを活かした進路や才能の分析</div>
+    </div>
+
+    <div style="flex: 1; margin: 0 20px;">
+      {% if target_grade == '小学生' %}
+      <!-- 小学生向け：RPG風ステータス -->
+      <div style="background: #1A1A24; border: 4px solid #FF4081; border-radius: 16px; padding: 20px; color: white;">
+        <h3 style="color: #FFD54F; text-align: center; font-size: 20px; letter-spacing: 0.1em; margin-bottom: 10px;">⚔️ キミの隠れジョブ</h3>
+        <div style="text-align: center; font-size: 26px; font-weight: 800; color: #FFF; text-shadow: 0 0 10px #FF4081; margin-bottom: 15px;">
+          『{{ extra_data.hidden_job }}』
+        </div>
+        
+        <div style="background: rgba(255,255,255,0.1); border-radius: 8px; padding: 12px; margin-bottom: 20px; font-size: 13px; line-height: 1.6; border-left: 4px solid #FFD54F;">
+          <div style="font-size: 11px; color: #FFD54F; font-weight: bold; margin-bottom: 4px;">📜 ギルドマスターからの鑑定書</div>
+          {{ extra_data.appraisal }}
+        </div>
+        
+        <div style="display: flex; align-items: flex-start; justify-content: center; gap: 20px;">
+          <!-- 左：レーダーチャート -->
+          <div style="flex: 1; text-align: center;">
+            <h4 style="color: #FF80AB; margin-bottom: 10px;">📊 オリジナルステータス</h4>
+            {% if rpg_chart_b64 %}
+            <img src="{{ rpg_chart_b64 }}" style="width: 100%; max-width: 250px; border-radius: 12px;">
+            {% endif %}
+          </div>
+          <!-- 右：特性スキル -->
+          <div style="flex: 1; display: flex; flex-direction: column; gap: 15px;">
+            <h4 style="color: #4FC3F7; margin-bottom: 5px;">✨ 特性スキル</h4>
+            <div style="background: rgba(79,195,247,0.1); border: 1px solid #4FC3F7; border-radius: 8px; padding: 10px;">
+              <div style="font-size: 14px; font-weight: bold; color: #81D4FA; margin-bottom: 4px;">【{{ extra_data.skill1_name }}】</div>
+              <div style="font-size: 11px; color: #E1F5FE; line-height: 1.5;">{{ extra_data.skill1_effect }}</div>
+            </div>
+            <div style="background: rgba(79,195,247,0.1); border: 1px solid #4FC3F7; border-radius: 8px; padding: 10px;">
+              <div style="font-size: 14px; font-weight: bold; color: #81D4FA; margin-bottom: 4px;">【{{ extra_data.skill2_name }}】</div>
+              <div style="font-size: 11px; color: #E1F5FE; line-height: 1.5;">{{ extra_data.skill2_effect }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      {% else %}
+      <!-- 中学生・高校生向け：進路提案 -->
+      <div style="display: flex; flex-direction: column; gap: 20px;">
+        <div style="background: white; border: 1px solid #DDE3EE; border-radius: 12px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+          <div style="font-size: 12px; color: #1565C0; font-weight: bold; margin-bottom: 5px; letter-spacing: 0.1em;">RECOMMENDED FACULTY</div>
+          <div style="font-size: 20px; font-weight: 800; color: #1A2340; margin-bottom: 10px; border-bottom: 2px solid #E3F2FD; padding-bottom: 5px;">
+            おすすめの学部：{{ extra_data.recommended_faculty }}
+          </div>
+          <div style="font-size: 13px; color: #455A8A; line-height: 1.6;">{{ extra_data.faculty_reason }}</div>
+        </div>
+
+        <div style="background: white; border: 1px solid #DDE3EE; border-radius: 12px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+          <div style="font-size: 12px; color: #1565C0; font-weight: bold; margin-bottom: 5px; letter-spacing: 0.1em;">RECOMMENDED JOB</div>
+          <div style="font-size: 20px; font-weight: 800; color: #1A2340; margin-bottom: 10px; border-bottom: 2px solid #E3F2FD; padding-bottom: 5px;">
+            おすすめの職業：{{ extra_data.recommended_job }}
+          </div>
+          <div style="font-size: 13px; color: #455A8A; line-height: 1.6;">{{ extra_data.job_reason }}</div>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- フッター (2ページ目) -->
+    <div class="footer" style="margin-top: auto;">
       <div class="footer-text">{{ org_name if org_name else '' }}</div>
       <div class="footer-text">Learning Portfolio System</div>
     </div>

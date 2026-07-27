@@ -23,6 +23,40 @@ TEMPLATES_DIR = Path(__file__).parent / "templates"
 DEFAULT_SCORE_LABELS = ["自己管理", "思考力・探究心", "コミュニケーション", "主体性・行動力", "協働・共創力"]
 
 
+def _html_to_pdf(html_content: str) -> bytes:
+    """
+    HTML文字列をPDFバイト列に変換する。
+    weasyprint を優先し、失敗時はPlaywrightにフォールバックする。
+    """
+    # まず weasyprint を試みる（クラウド・ローカル共通）
+    try:
+        from weasyprint import HTML, CSS
+        pdf_bytes = HTML(string=html_content, base_url=str(TEMPLATES_DIR)).write_pdf()
+        return pdf_bytes
+    except Exception:
+        pass
+
+    # フォールバック: Playwright（ローカル環境のみ）
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page()
+            page.set_content(html_content, wait_until="networkidle")
+            page.wait_for_timeout(800)
+            pdf_bytes = page.pdf(
+                format='A4',
+                print_background=True,
+                margin={"top": "0", "bottom": "0", "left": "0", "right": "0"}
+            )
+            browser.close()
+        return pdf_bytes
+    except Exception as e:
+        raise RuntimeError(f"PDF生成に失敗しました: {e}")
+
+
+
+
 def _get_score_columns(row: dict) -> tuple[list[str], list[float]]:
     """
     CSVの行データから「総合評価」「コメント」以外のスコア列を動的に抽出する。
@@ -30,7 +64,19 @@ def _get_score_columns(row: dict) -> tuple[list[str], list[float]]:
     Returns:
         (labels, scores) のタプル
     """
-    exclude_keys = {"生徒名", "総合評価", "総合コメント", "コメント", ""}
+    exclude_keys = {
+        "生徒名", "総合評価", "総合コメント", "コメント", "",
+        "おすすめ学部", "学部理由", "おすすめ職業", "職業理由",
+        "隠れジョブ", "ジョブ理由",
+        "ステータス1名", "ステータス1値",
+        "ステータス2名", "ステータス2値",
+        "ステータス3名", "ステータス3値",
+        "ステータス4名", "ステータス4値",
+        "ステータス5名", "ステータス5値",
+        "スキル1名", "スキル1効果",
+        "スキル2名", "スキル2効果",
+        "鑑定書"
+    }
     labels = []
     scores = []
 
@@ -55,7 +101,19 @@ def _get_score_items_with_reasons(row: dict) -> list[dict]:
     2. 各スコア列に対し、「列名+_根拠」を環境構築して根拠テキストを取得
     3. 見つからなければ列順で次の非数値列を利用
     """
-    exclude_keys = {"生徒名", "総合評価", "総合コメント", "コメント", ""}
+    exclude_keys = {
+        "生徒名", "総合評価", "総合コメント", "コメント", "",
+        "おすすめ学部", "学部理由", "おすすめ職業", "職業理由",
+        "隠れジョブ", "ジョブ理由",
+        "ステータス1名", "ステータス1値",
+        "ステータス2名", "ステータス2値",
+        "ステータス3名", "ステータス3値",
+        "ステータス4名", "ステータス4値",
+        "ステータス5名", "ステータス5値",
+        "スキル1名", "スキル1効果",
+        "スキル2名", "スキル2効果",
+        "鑑定書"
+    }
 
     # スコア列を特定（数値で"_根拠"が付いていない列）
     score_keys = []
@@ -147,11 +205,14 @@ def _encode_image_to_base64(image_bytes: bytes, mime: str = "image/png") -> str:
 def _build_template_context(row: dict, template_type: str,
                              org_name: str = "",
                              logo_b64: str = "",
-                             logo_position: str = "center") -> dict:
+                             logo_position: str = "center",
+                             target_grade: str = "中学生") -> dict:
     """
     テンプレートに渡すコンテキスト辞書を構築する。
     AIが出力するCSVの列名に依存せず、動的にスコアを抽出する。
     """
+    from radar_chart import generate_rpg_chart
+    
     student_name = row.get("生徒名", "")
     total_score_str = row.get("総合評価", "3.0")
     comment = row.get("総合コメント", row.get("コメント", ""))
@@ -206,6 +267,49 @@ def _build_template_context(row: dict, template_type: str,
     else:
         rank = "C"
         rank_color = "#FF8A65"
+        
+    # 学年別追加データのパース
+    extra_data = {}
+    rpg_chart_b64 = ""
+    if target_grade == "小学生":
+        extra_data = {
+            "hidden_job": row.get("隠れジョブ", ""),
+            "status1_name": row.get("ステータス1名", "ステータス1"),
+            "status1_val": row.get("ステータス1値", "0"),
+            "status2_name": row.get("ステータス2名", "ステータス2"),
+            "status2_val": row.get("ステータス2値", "0"),
+            "status3_name": row.get("ステータス3名", "ステータス3"),
+            "status3_val": row.get("ステータス3値", "0"),
+            "status4_name": row.get("ステータス4名", "ステータス4"),
+            "status4_val": row.get("ステータス4値", "0"),
+            "status5_name": row.get("ステータス5名", "ステータス5"),
+            "status5_val": row.get("ステータス5値", "0"),
+            "skill1_name": row.get("スキル1名", ""),
+            "skill1_effect": row.get("スキル1効果", ""),
+            "skill2_name": row.get("スキル2名", ""),
+            "skill2_effect": row.get("スキル2効果", ""),
+            "appraisal": row.get("鑑定書", ""),
+        }
+        # RPG専用レーダーチャート生成 (5角形に変更)
+        rpg_labels = [
+            extra_data["status1_name"], extra_data["status2_name"], 
+            extra_data["status3_name"], extra_data["status4_name"], extra_data["status5_name"]
+        ]
+        rpg_scores = [
+            extra_data["status1_val"], extra_data["status2_val"], 
+            extra_data["status3_val"], extra_data["status4_val"], extra_data["status5_val"]
+        ]
+        # Premium C のようなダークテーマかどうか
+        is_dark = "Premium C" in template_type or "Premium A" in template_type
+        rpg_chart_b64 = generate_rpg_chart(rpg_labels, rpg_scores, is_dark=is_dark)
+        
+    else:
+        extra_data = {
+            "recommended_faculty": row.get("おすすめ学部", ""),
+            "faculty_reason": row.get("学部理由", ""),
+            "recommended_job": row.get("おすすめ職業", ""),
+            "job_reason": row.get("職業理由", ""),
+        }
 
     return {
         "student_name": student_name,
@@ -216,6 +320,9 @@ def _build_template_context(row: dict, template_type: str,
         "scores": scores,
         "comment": comment,
         "chart_b64": chart_b64,
+        "rpg_chart_b64": rpg_chart_b64,
+        "target_grade": target_grade,
+        "extra_data": extra_data,
         "rank": rank,
         "rank_color": rank_color,
         "org_name": org_name,
@@ -248,7 +355,8 @@ def generate_pdfs_as_zip(students_data: list[dict],
                          org_name: str = "",
                          logo_bytes: bytes = None,
                          logo_position: str = "center",
-                         custom_layout: dict = None) -> bytes:
+                         custom_layout: dict = None,
+                         target_grade: str = "中学生") -> bytes:
     """
     複数の生徒データからPDFを一括生成し、ZIPファイルのバイト列を返す。
 
@@ -263,8 +371,6 @@ def generate_pdfs_as_zip(students_data: list[dict],
     Returns:
         ZIPファイルのバイト列
     """
-    from playwright.sync_api import sync_playwright
-
     # ロゴ画像をBase64に変換
     logo_b64 = ""
     if logo_bytes:
@@ -281,77 +387,56 @@ def generate_pdfs_as_zip(students_data: list[dict],
 
     zip_buffer = io.BytesIO()
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for row in students_data:
+            student_name = row.get("生徒名", "不明")
 
-        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
-            for row in students_data:
-                student_name = row.get("生徒名", "不明")
+            try:
+                # コンテキスト構築
+                ctx = _build_template_context(
+                    row=row,
+                    template_type=template_type,
+                    org_name=org_name,
+                    logo_b64=logo_b64,
+                    logo_position=logo_position,
+                    target_grade=target_grade
+                )
 
-                try:
-                    # コンテキスト構築
-                    ctx = _build_template_context(
-                        row=row,
-                        template_type=template_type,
-                        org_name=org_name,
-                        logo_b64=logo_b64,
-                        logo_position=logo_position
-                    )
+                # Type D: カスタムレイアウト
+                if custom_layout:
+                    ctx["custom_layout"] = custom_layout
 
-                    # Type D: カスタムレイアウト
-                    if custom_layout:
-                        ctx["custom_layout"] = custom_layout
+                # HTML生成
+                html_content = template.render(**ctx)
 
-                    # HTML生成
-                    html_content = template.render(**ctx)
+                # HTML→PDF変換
+                pdf_bytes = _html_to_pdf(html_content)
 
-                    # Playwright でHTML→PDF
-                    with tempfile.NamedTemporaryFile(
-                        suffix='.html', mode='w',
-                        encoding='utf-8', delete=False
-                    ) as tmp:
-                        tmp.write(html_content)
-                        tmp_path = tmp.name
+                # ZIPに追加
+                safe_name = "".join(
+                    c for c in student_name if c not in r'\/:*?"<>|'
+                )
+                zf.writestr(f"{safe_name}_portfolio.pdf", pdf_bytes)
 
-                    page.goto(f"file:///{tmp_path.replace(os.sep, '/')}")
-                    page.wait_for_timeout(800)  # チャート描画待ち
-
-                    pdf_bytes = page.pdf(
-                        format='A4',
-                        print_background=True,
-                        margin={"top": "0", "bottom": "0", "left": "0", "right": "0"}
-                    )
-
-                    os.unlink(tmp_path)
-
-                    # ZIPに追加
-                    safe_name = "".join(
-                        c for c in student_name if c not in r'\/:*?"<>|'
-                    )
-                    zf.writestr(f"{safe_name}_portfolio.pdf", pdf_bytes)
-
-                except Exception as e:
-                    # エラーがあってもスキップして続行
-                    error_msg = f"ERROR generating PDF for {student_name}: {traceback.format_exc()}"
-                    zf.writestr(f"{student_name}_ERROR.txt", error_msg)
-
-        browser.close()
+            except Exception as e:
+                # エラーがあってもスキップして続行
+                error_msg = f"ERROR generating PDF for {student_name}: {traceback.format_exc()}"
+                zf.writestr(f"{student_name}_ERROR.txt", error_msg)
 
     zip_buffer.seek(0)
     return zip_buffer.read()
+
 
 
 def generate_single_pdf_bytes(row: dict,
                                template_type: str = "A",
                                org_name: str = "",
                                logo_bytes: bytes = None,
-                               logo_position: str = "center") -> bytes:
+                               logo_position: str = "center",
+                               target_grade: str = "中学生") -> bytes:
     """
     1名分のPDFバイト列を返す（プレビュー用）。
     """
-    from playwright.sync_api import sync_playwright
-
     logo_b64 = ""
     if logo_bytes:
         logo_b64 = _encode_image_to_base64(logo_bytes)
@@ -365,32 +450,10 @@ def generate_single_pdf_bytes(row: dict,
         template_type=template_type,
         org_name=org_name,
         logo_b64=logo_b64,
-        logo_position=logo_position
+        logo_position=logo_position,
+        target_grade=target_grade
     )
 
     html_content = template.render(**ctx)
+    return _html_to_pdf(html_content)
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-
-        with tempfile.NamedTemporaryFile(
-            suffix='.html', mode='w',
-            encoding='utf-8', delete=False
-        ) as tmp:
-            tmp.write(html_content)
-            tmp_path = tmp.name
-
-        page.goto(f"file:///{tmp_path.replace(os.sep, '/')}")
-        page.wait_for_timeout(800)
-
-        pdf_bytes = page.pdf(
-            format='A4',
-            print_background=True,
-            margin={"top": "0", "bottom": "0", "left": "0", "right": "0"}
-        )
-
-        os.unlink(tmp_path)
-        browser.close()
-
-    return pdf_bytes

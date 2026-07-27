@@ -17,9 +17,17 @@ from ai_evaluator import (
     evaluate_students_with_gemini, results_to_csv_bytes
 )
 
-# .env からAPIキーを自動読込
+# .env からAPIキーを自動読込（ローカル環境用）
 load_dotenv(Path(__file__).parent / ".env")
 API_KEY = os.environ.get("GEMINI_API_KEY", "")
+
+# Streamlit Cloud のSecretsからも取得（クラウド環境用）
+if not API_KEY:
+    try:
+        API_KEY = st.secrets["GEMINI_API_KEY"]
+    except Exception:
+        API_KEY = ""
+
 
 # ─── ページ設定 ───────────────────────────────────────────────
 st.set_page_config(
@@ -113,12 +121,22 @@ with st.sidebar:
     )
 
     st.markdown("---")
+    st.markdown("### 🎓 対象学年（分析レポート用）")
+    target_grade = st.radio(
+        "学年カテゴリ",
+        ["小学生", "中学生", "高校生"],
+        index=0,
+        help="対象学年に応じた分析（職業提案やRPG風ステータス）が2ページ目に出力されます。"
+    )
+
+    st.markdown("---")
     st.markdown("### 📊 評価項目モード")
     use_rubric_items = st.radio(
         "評価軸",
         [False, True],
         format_func=lambda x: "ルーブリックの項目をそのまま使う" if x else f"固定5項目（{FIXED_LABELS[0]}等）"
     )
+
 
 # ─── タブ ────────────────────────────────────────────────────
 tab1, tab2, tab3 = st.tabs([
@@ -306,7 +324,8 @@ with tab2:
                     api_key=API_KEY,
                     model_name=selected_model,
                     use_rubric_items=use_rubric_items,
-                    progress_callback=on_progress
+                    progress_callback=on_progress,
+                    target_grade=target_grade
                 )
                 st.session_state.eval_results = results
                 progress_bar.progress(100)
@@ -404,7 +423,8 @@ with tab3:
                             template_type=template_type,
                             org_name=org_name,
                             logo_bytes=logo_bytes,
-                            logo_position=logo_pos_key
+                            logo_position=logo_pos_key,
+                            target_grade=target_grade
                         )
                         name = eval_results[0].get("生徒名", "preview")
                         st.download_button(
@@ -429,7 +449,8 @@ with tab3:
                         template_type=template_type,
                         org_name=org_name,
                         logo_bytes=logo_bytes,
-                        logo_position=logo_pos_key
+                        logo_position=logo_pos_key,
+                        target_grade=target_grade
                     )
                     progress.progress(100)
                     status.empty()
