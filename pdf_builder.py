@@ -191,13 +191,16 @@ def _get_score_items_with_reasons(row: dict) -> list[dict]:
         "鑑定書"
     }
 
+    import math
     # スコア列を特定（数値で"_根拠"が付いていない列）
     score_keys = []
     for k, v in row.items():
         if not k or k in exclude_keys or k.endswith("_根拠"):
             continue
         try:
-            float(str(v).strip())
+            val = float(str(v).strip())
+            if math.isnan(val):
+                continue
             score_keys.append(k)
         except (ValueError, TypeError):
             pass
@@ -295,6 +298,9 @@ def _build_template_context(row: dict, template_type: str,
 
     try:
         total_score = float(total_score_str)
+        import math
+        if math.isnan(total_score):
+            total_score = 3.0
     except (ValueError, TypeError):
         total_score = 3.0
 
@@ -446,15 +452,46 @@ def _get_template_filename(template_type: str) -> str:
     return mapping.get(template_type, "type_a.html")
 
 
-def generate_pdfs_as_zip(students_data: list[dict],
+def _generate_one_pdf(args: tuple) -> tuple:
+    """
+    1名分のPDFを生成して返すヘルパー（並列処理用）。
+    Returns: (index, student_name, pdf_bytes_or_None, error_msg_or_None)
+    """
+    idx, row, template_type, org_name, logo_b64, logo_position, custom_layout, target_grade = args
+    student_name = row.get("生徒名", "不明")
+    try:
+        env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)))
+        template_file = _get_template_filename(template_type)
+        template = env.get_template(template_file)
+
+        ctx = _build_template_context(
+            row=row,
+            template_type=template_type,
+            org_name=org_name,
+            logo_b64=logo_b64,
+            logo_position=logo_position,
+            target_grade=target_grade
+        )
+        if custom_layout:
+            ctx["custom_layout"] = custom_layout
+
+        html_content = template.render(**ctx)
+        pdf_bytes = _html_to_pdf(html_content)
+        return (idx, student_name, pdf_bytes, None)
+    except Exception:
+        return (idx, student_name, None, traceback.format_exc())
+
+
+def generate_pdfs_as_zip(students_data: list,
                          template_type: str = "A",
                          org_name: str = "",
                          logo_bytes: bytes = None,
                          logo_position: str = "center",
                          custom_layout: dict = None,
-                         target_grade: str = "中学生") -> bytes:
+                         target_grade: str = "中学生",
+                         progress_callback=None) -> bytes:
     """
-    複数の生徒データからPDFを一括生成し、ZIPファイルのバイト列を返す。
+    複数の生徒データからPDFを並列生成し、ZIPファイルのバイト列を返す。
 
     Args:
         students_data: CSVの行データのリスト（dictのリスト）
@@ -463,64 +500,56 @@ def generate_pdfs_as_zip(students_data: list[dict],
         logo_bytes: ロゴ画像のバイト列（省略可）
         logo_position: ロゴ位置 "center" or "top_right"
         custom_layout: Type D用のカスタムレイアウト設定（dict）
+        target_grade: 対象学年
+        progress_callback: 進捗通知用コールバック関数 callback(done: int, total: int, name: str)
 
     Returns:
         ZIPファイルのバイト列
     """
-    # ロゴ画像をBase64に変換
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     logo_b64 = ""
     if logo_bytes:
         logo_b64 = _encode_image_to_base64(logo_bytes)
 
-    # Jinja2環境設定
-    env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)))
-    template_file = _get_template_filename(template_type)
+    n_total = len(students_data)
 
-    try:
-        template = env.get_template(template_file)
-    except Exception as e:
-        raise FileNotFoundError(f"テンプレートファイル '{template_file}' が見つかりません: {e}")
+    # 各生徒の引数タプルを組み立てる
+    args_list = [
+        (i, row, template_type, org_name, logo_b64, logo_position, custom_layout, target_grade)
+        for i, row in enumerate(students_data)
+    ]
 
+    # 結果を元の順番で保持
+    results = [None] * n_total
+    done_count = [0]
+
+    # Playwright（Chromium）はプロセス内で複数インスタンスを起動できるが
+    # メモリ消費を抑えるため max_workers=2 に制限
+    max_workers = min(2, n_total)
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_map = {executor.submit(_generate_one_pdf, args): args[0] for args in args_list}
+        for future in as_completed(future_map):
+            idx, student_name, pdf_bytes, err_msg = future.result()
+            results[idx] = (student_name, pdf_bytes, err_msg)
+            done_count[0] += 1
+            if progress_callback:
+                progress_callback(done_count[0], n_total, student_name)
+
+    # 元の順番でZIPに格納
     zip_buffer = io.BytesIO()
-
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
-        for row in students_data:
-            student_name = row.get("生徒名", "不明")
-
-            try:
-                # コンテキスト構築
-                ctx = _build_template_context(
-                    row=row,
-                    template_type=template_type,
-                    org_name=org_name,
-                    logo_b64=logo_b64,
-                    logo_position=logo_position,
-                    target_grade=target_grade
-                )
-
-                # Type D: カスタムレイアウト
-                if custom_layout:
-                    ctx["custom_layout"] = custom_layout
-
-                # HTML生成
-                html_content = template.render(**ctx)
-
-                # HTML→PDF変換
-                pdf_bytes = _html_to_pdf(html_content)
-
-                # ZIPに追加
-                safe_name = "".join(
-                    c for c in student_name if c not in r'\/:*?"<>|'
-                )
+        for student_name, pdf_bytes, err_msg in results:
+            if pdf_bytes:
+                safe_name = "".join(c for c in student_name if c not in r'\/:*?"<>|')
                 zf.writestr(f"{safe_name}_portfolio.pdf", pdf_bytes)
-
-            except Exception as e:
-                # エラーがあってもスキップして続行
-                error_msg = f"ERROR generating PDF for {student_name}: {traceback.format_exc()}"
-                zf.writestr(f"{student_name}_ERROR.txt", error_msg)
+            else:
+                zf.writestr(f"{student_name}_ERROR.txt",
+                            f"ERROR generating PDF for {student_name}:\n{err_msg}")
 
     zip_buffer.seek(0)
     return zip_buffer.read()
+
 
 
 

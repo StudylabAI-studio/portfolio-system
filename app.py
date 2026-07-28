@@ -579,21 +579,30 @@ with tab3:
 
         with col_all:
             if st.button(f"🚀 全{len(eval_results)}名分のPDFを一括生成", use_container_width=True):
-                progress = st.progress(0)
-                status = st.empty()
-                status.text(f"⏳ {len(eval_results)}名分のPDFを生成中...")
                 try:
                     logo_bytes = logo_file.read() if logo_file else None
+                    n_pdf = len(eval_results)
+
+                    pdf_progress = st.progress(0.0, text=f"⏳ PDFを生成しています… 0/{n_pdf}名")
+                    pdf_status = st.empty()
+
+                    def _pdf_callback(done, total, name):
+                        pct = done / total
+                        pdf_progress.progress(pct, text=f"⏳ PDF生成中… {done}/{total}名完了")
+                        pdf_status.caption(f"✅ 完了：{name}")
+
                     zip_bytes = generate_pdfs_as_zip(
                         students_data=eval_results,
                         template_type=template_type,
                         org_name=org_name,
                         logo_bytes=logo_bytes,
                         logo_position=logo_pos_key,
-                        target_grade=target_grade
+                        target_grade=target_grade,
+                        progress_callback=_pdf_callback
                     )
-                    progress.progress(100)
-                    status.empty()
+                    pdf_progress.progress(1.0, text="✅ PDF生成完了！")
+                    pdf_status.empty()
+
                     st.markdown('<div class="success-box">🎉 PDF一括生成完了！ZIPファイルをダウンロードしてください。</div>', unsafe_allow_html=True)
                     st.download_button(
                         f"⬇️ 全{len(eval_results)}名分 PDF（ZIP）",
