@@ -119,11 +119,12 @@
   }
   /* 評価項目詳細の見出しフォント（右パネル専用） */
   .section-title-detail {
-    font-family: 'Playfair Display', 'Cormorant Garamond', 'Noto Serif JP', Georgia, serif;
+    font-family: Georgia, 'Times New Roman', 'Noto Serif JP', '游明朝', 'Yu Mincho', serif;
     font-size: 15px; font-weight: 700; color: #1565C0;
-    letter-spacing: 0.06em;
-    border-left: 3px solid #42A5F5; padding-left: 10px;
+    letter-spacing: 0.08em;
+    border-left: 4px solid #1565C0; padding-left: 10px;
     margin-bottom: 8px;
+    font-style: italic;
   }
   .chart-wrapper {
     background: #F0F4FF; border-radius: 12px;
@@ -141,6 +142,7 @@
   .score-item {
     background: #FFFFFF; border-radius: 10px;
     padding: {{ sc_pad }};
+    padding-left: 14px; padding-right: 14px;
     box-shadow: 0 1px 4px rgba(21,101,192,0.08);
   }
   .score-item-header { display: flex; justify-content: space-between; align-items: center; }
