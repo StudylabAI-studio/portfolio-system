@@ -240,6 +240,21 @@ with tab1:
                         for page in pdf.pages:
                             rubric_text += page.extract_text() or ""
                 elif rubric_file.name.endswith(".xlsx"):
+                    import openpyxl
+                    wb = openpyxl.load_workbook(rubric_file)
+                    ws = wb.active
+                    all_rows_xl = list(ws.iter_rows(values_only=True))
+                    # 「観点」列（列C = index 2）からヘッダー行を除いた評価項目名を取得
+                    rubric_labels = []
+                    for ri, row in enumerate(all_rows_xl):
+                        if ri == 0:
+                            continue  # ヘッダー行はスキップ
+                        if row and len(row) > 2 and row[2] is not None:
+                            label = str(row[2]).strip()
+                            if label:
+                                rubric_labels.append(label)
+                    st.session_state["rubric_item_labels"] = rubric_labels
+                    # テキスト化（AIへの参照用）
                     df_r = pd.read_excel(rubric_file)
                     rubric_text = df_r.to_string(index=False)
                 elif rubric_file.name.endswith(".csv"):
@@ -254,7 +269,12 @@ with tab1:
                     rubric_text = rubric_file.read().decode("utf-8", errors="ignore")
 
                 st.session_state["rubric_text"] = rubric_text
-                st.success(f"✅ ルーブリック読み込み完了（{len(rubric_text)}文字）")
+                labels_found = st.session_state.get("rubric_item_labels", [])
+                if labels_found:
+                    st.success(f"✅ ルーブリック読み込み完了（評価項目{len(labels_found)}つ）")
+                    st.info(f"📌 評価項目：{' ／ '.join(labels_found)}")
+                else:
+                    st.success(f"✅ ルーブリック読み込み完了（{len(rubric_text)}文字）")
                 with st.expander("📄 ルーブリック内容を確認"):
                     st.text(rubric_text[:1500] + ("..." if len(rubric_text) > 1500 else ""))
 
@@ -343,9 +363,11 @@ with tab2:
                         expected_headers=expected_headers
                     )
                 
-                # 初回の成功時にヘッダー構造を記憶しておく（AIが2人目以降でヘッダーを省略した場合の救済用）
+                # 初回の成功時にヘッダー構造を記憶しておく（AIが2人目以降でヘッダーを省略・改変した場合の強制補正用）
                 if not expected_headers and result and "総合評価" in result:
-                    st.session_state.eval_headers = list(result.keys())
+                    # 後から追加されたJSONキーなどはプロンプトに渡さないよう除外する
+                    exclude_for_prompt = {"hs_career_json", "jhs_career_json"}
+                    st.session_state.eval_headers = [k for k in result.keys() if k not in exclude_for_prompt]
 
                 st.session_state.eval_results.append(result)
                 if err:
@@ -383,8 +405,22 @@ with tab2:
                 st.session_state.eval_queue = list(target_students)
                 st.session_state.eval_running = True
                 st.session_state.stop_eval = False
-                st.session_state.eval_headers = None
+
+                # ── ルーブリック項目名から固定ヘッダーを事前に組み立てる ──
+                # use_rubric_items=True かつ rubric_item_labels がある場合、
+                # 最初から全員に同じ列名を強制することで二重列・ズレを完全防止
+                rubric_labels = st.session_state.get("rubric_item_labels", [])
+                if use_rubric_items and rubric_labels:
+                    fixed_headers = ["生徒名", "総合評価", "総合コメント"]
+                    for label in rubric_labels:
+                        fixed_headers.append(label)
+                        fixed_headers.append(f"{label}_根拠")
+                    st.session_state.eval_headers = fixed_headers
+                elif "eval_headers" in st.session_state:
+                    del st.session_state["eval_headers"]
+
                 st.rerun()
+
 
         # 結果表示・ダウンロード
         if st.session_state.eval_results:

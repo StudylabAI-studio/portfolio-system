@@ -37,9 +37,14 @@ DEFAULT_RUBRIC = """
 """
 
 
-def build_evaluation_prompt(student_name: str, logs: list,
-                            rubric_text: str, use_rubric_items: bool = False,
-                            target_grade: str = "中学生") -> str:
+def build_evaluation_prompt(
+    student_name: str,
+    logs: list,
+    rubric_text: str,
+    use_rubric_items: bool = False,
+    target_grade: str = "中学生",
+    expected_headers: list = None
+) -> str:
     """
     1名分の評価プロンプトを生成する。
     logs = [{"テーマ名": ..., "ライフログ内容": ..., "投稿日時": ...}, ...]
@@ -99,9 +104,13 @@ CSVの各列には以下の内容を必ず出力してください：
 
 【ヘッダー作成の厳密なルール】
 1. ヘッダー行は必ず以下のフォーマットで出力してください。
-生徒名,総合評価,総合コメント,（実際の評価項目1）,（実際の評価項目1）_根拠,（実際の評価項目2）,（実際の評価項目2）_根拠,...{extra_columns}
-2. 根拠コメントの列名は、必ず「評価項目名」に「_根拠」という文字を直接くっつけた名前にしてください（例：「課題発見_根拠」）。「根拠」という単体や別の名前はNGです。
+生徒名,総合評価,総合コメント,（評価項目1）,（評価項目1）_根拠,（評価項目2）,（評価項目2）_根拠,...{extra_columns}
+（例：生徒名,総合評価,総合コメント,主体性,主体性_根拠,課題発見,課題発見_根拠）
+2. 「評価項目のスコア列（数値）」と「その根拠コメント列（_根拠）」は、必ずペアで出力してください。スコア列を省略して根拠コメント列だけを出力することは絶対にやめてください。
 3. （最重要）データ行の各根拠コメントの中には、絶対に半角カンマ(,)を含めないでください。カンマは全角の「、」に置き換えてください。
+
+【データ行の出力例】
+{student_name},3.8,ここに全体の総合コメントを書く,4.0,ここに評価項目1の根拠コメントを書く,3.5,ここに評価項目2の根拠を書く,...{extra_example}
 """
     else:
         # "自己管理,自己管理_根拠,思考力・探究心,思考力・探究心_根拠,..." のように組み立てる
@@ -120,6 +129,36 @@ CSVの各列には以下の内容を必ず出力してください：
 
 生徒名,総合評価,総合コメント,{labels_str}{extra_columns}
 {student_name},3.8,ここに全体の総合コメントを書く,4.0,ここに自己管理の根拠コメントを書く,3.5,ここに思考力・探究心の根拠を書く,...{extra_example}
+"""
+
+    if expected_headers:
+        header_str = ",".join(expected_headers)
+        # スコア列と根拠列のペアをデータ行の例として組み立てる
+        example_values = [student_name, "3.8", "ここに総合コメントを記入"]
+        for h in expected_headers[3:]:  # 生徒名・総合評価・総合コメントの後ろ
+            if h.endswith("_根拠"):
+                example_values.append("ここに根拠コメントを記入（半角カンマ不可）")
+            else:
+                example_values.append("3.5")
+        example_str = ",".join(example_values)
+
+        output_instruction = f"""
+【出力形式 - 絶対に守ること】
+必ずCSV形式のみで回答してください（説明文・コードブロックは一切不要）。
+必ず「ヘッダー行」と「データ行」の合計2行のみを出力してください。
+
+【ヘッダー行（変更禁止）】
+以下のヘッダーを一字一句変えずにそのまま出力してください：
+{header_str}
+
+【データ行のルール】
+1. 「スコア列（数値）」と「根拠コメント列（_根拠）」は必ずペアで、スコアを省略しないこと。
+2. 数値列には必ず1.0〜5.0の数値を入れること（根拠コメントを入れてはいけない）。
+3. 根拠コメント列には必ずコメント文を入れること（数値だけ入れてはいけない）。
+4. 根拠コメントの中に半角カンマ(,)を絶対に含めないこと。全角の「、」に置き換えること。
+
+【データ行の出力例】
+{example_str}
 """
 
     return f"""あなたは教育評価の専門家です。以下の生徒のライフログ（複数件）を総合的に読み解き、ルーブリックに基づいて評価してください。
@@ -263,7 +302,8 @@ def evaluate_single_student(
             logs=logs,
             rubric_text=rubric_text,
             use_rubric_items=use_rubric_items,
-            target_grade=target_grade
+            target_grade=target_grade,
+            expected_headers=expected_headers
         )
         response = client.models.generate_content(
             model=model_name,
@@ -344,15 +384,50 @@ def _parse_gemini_csv(raw_text: str, student_name: str, expected_headers: list =
         if header_idx is None:
             return None
 
-        # ── 1行しかない場合の救済（ヘッダー省略時） ──
-        if len(all_rows) == 1 and expected_headers:
+        # ── expected_headers がある場合、AIのヘッダーを完全無視して位置だけでマッピング ──
+        # AIが列名を変えたり省略したりしても常に正しい列に値が入るようにする
+        if expected_headers:
             headers = expected_headers
-            data = [v.strip() for v in all_rows[0]]
-        elif header_idx + 1 >= len(all_rows):
+            # データ行だけ取り出す（ヘッダー行の次の行 or 1行しかない場合はその行）
+            if len(all_rows) == 1:
+                raw_data = [v.strip() for v in all_rows[0]]
+            else:
+                raw_data = [v.strip() for v in all_rows[header_idx + 1]]
+
+            # データが列数より多い場合は余剰分をマージして長さを合わせる
+            if len(raw_data) > len(headers):
+                excess = len(raw_data) - len(headers)
+
+                def _is_numeric(v: str) -> bool:
+                    return bool(re.match(r'^\d+\.?\d*$', v.strip()))
+
+                # スコア位置（偶数インデックス 3,5,7...）の数値が壊れないようマージ先を選ぶ
+                merged = None
+                for merge_at in range(2, len(raw_data) - excess + 1):
+                    candidate = raw_data[:merge_at] + [", ".join(raw_data[merge_at:merge_at + excess + 1])] + raw_data[merge_at + excess + 1:]
+                    if len(candidate) == len(headers):
+                        merged = candidate
+                        break
+                raw_data = merged if merged else raw_data[:len(headers)]
+
+            # データが列数より少ない場合は空文字で埋める
+            if len(raw_data) < len(headers):
+                raw_data.extend([""] * (len(headers) - len(raw_data)))
+
+            cleaned = {}
+            for h, v in zip(headers, raw_data):
+                if h:
+                    cleaned[h] = v
+            if "生徒名" not in cleaned or not cleaned["生徒名"]:
+                cleaned["生徒名"] = student_name
+            return cleaned if len(cleaned) >= 2 else None
+
+        # ── expected_headers なし（1人目）：AIの出力をそのまま解析 ──
+        if header_idx + 1 >= len(all_rows):
             return None
-        else:
-            headers = [h.strip() for h in all_rows[header_idx]]
-            data    = [v.strip() for v in all_rows[header_idx + 1]]
+
+        headers = [h.strip() for h in all_rows[header_idx]]
+        data    = [v.strip() for v in all_rows[header_idx + 1]]
 
         # ── 列数ズレの自動修復（引用符なしカンマ混入対策） ────────────
         if len(data) > len(headers):
@@ -403,6 +478,7 @@ def _parse_gemini_csv(raw_text: str, student_name: str, expected_headers: list =
 
         return cleaned if len(cleaned) >= 2 else None
 
+
     except Exception:
         return None
 
@@ -452,20 +528,56 @@ def group_logs_by_student(df) -> list:
 
 
 def results_to_csv_bytes(results: list) -> bytes:
-    """評価結果をCSVバイト列に変換（BOM付きUTF-8 = Excel対応）"""
+    """評価結果をCSVバイト列に変換（BOM付きUTF-8 = Excel対応）
+
+    【設計方針】
+    - 1人目の生徒が持つ列名を「正式な列リスト」として確定する
+    - 2人目以降の生徒dictに1人目と異なる列名が含まれる場合は、
+      列の「位置（インデックス）」を基準にマッピングして正式な列名に書き換える
+    - これにより、AIが毎回違う列名を使っても列のズレ・二重化が発生しない
+    - hs_career_json / jhs_career_json は常に末尾に付与する
+    """
     if not results:
         return b""
-    all_keys = []
-    for r in results:
-        for k in r.keys():
-            if k not in all_keys:
-                all_keys.append(k)
+
+    SPECIAL_KEYS = {"hs_career_json", "jhs_career_json"}
+
+    # ── 1人目の列構造を正式な列リストとして確定 ──
+    first = results[0]
+    canonical_keys = [k for k in first.keys() if k not in SPECIAL_KEYS]
+    # 特殊キーは末尾に追加（存在する場合のみ）
+    special_keys_present = [k for k in SPECIAL_KEYS if any(k in r for r in results)]
+    all_keys = canonical_keys + special_keys_present
+
+    # ── 各行を canonical_keys に揃えて書き出す ──
     buf = io.StringIO()
-    writer = csv.DictWriter(buf, fieldnames=all_keys, extrasaction='ignore')
+    writer = csv.DictWriter(buf, fieldnames=all_keys, extrasaction='ignore', restval='')
     writer.writeheader()
+
     for r in results:
-        writer.writerow(r)
+        # r のキーのうち SPECIAL_KEYS 以外を「値リスト」として取り出す
+        r_normal_keys = [k for k in r.keys() if k not in SPECIAL_KEYS]
+        r_values = [r[k] for k in r_normal_keys]
+
+        # canonical_keys と r_normal_keys が一致する場合はそのまま使用
+        if r_normal_keys == canonical_keys:
+            row_dict = {k: r.get(k, '') for k in all_keys}
+        else:
+            # 列名が異なる場合は「位置」でマッピング（AIが列名を変えた場合の救済）
+            row_dict = {}
+            for i, canon_key in enumerate(canonical_keys):
+                if i < len(r_values):
+                    row_dict[canon_key] = r_values[i]
+                else:
+                    row_dict[canon_key] = ''
+            # 特殊キーを追加
+            for sk in special_keys_present:
+                row_dict[sk] = r.get(sk, '')
+
+        writer.writerow(row_dict)
+
     return buf.getvalue().encode('utf-8-sig')
+
 
 
 def _generate_hs_career_json(student_name: str, logs: list, client, model_name: str) -> str:
@@ -485,12 +597,13 @@ def _generate_hs_career_json(student_name: str, logs: list, client, model_name: 
 
 ### 指示・条件
 1. 必ず【学部・学科リスト】に存在する「学部名」と「分野名」の組み合わせから選定すること。
-2. 【選定理由（reason）】は、**必ず100文字以上150文字程度**の丁寧で温かみのある文章で作成すること。以下の構成を必ず含めてください。
+2. 生徒全員が同じ学校行事（例：体育祭や修学旅行）について書いている場合があります。その場合でも、生徒一人ひとりの「役割の違い（リーダー、裏方、分析、調整役など）」や「着眼点の違い」を鋭く捉え、**できる限り多様な学部・分野を提案してください**。全員に同じ学部（例：経営学部や社会学部など）ばかりを提案する偏りを避け、その生徒ならではの個性にフォーカスしたユニークな視点で選定すること。
+3. 【選定理由（reason）】は、**必ず100文字以上150文字程度**の丁寧で温かみのある文章で作成すること。以下の構成を必ず含めてください。
    - ① ログから読み取れる生徒の強みや適性への共感と分析
    - ② その学部・分野に進むことで、具体的にどのような知識やスキルが身につくか
    - ③ その学びが、生徒の将来の可能性をどう広げるか
-3. 【おすすめの職業（professions）】は、選定した学部・分野の学びに直結し、かつ生徒の興味関心を活かせる「具体的で魅力的な職業」を各順位ごとに3つ提案すること。（例：漠然とした「エンジニア」ではなく「UI/UXデザイナー」や「データサイエンティスト」など、高校生が憧れるような具体的な名称にすること）
-4. 出力は、既存のシステムを壊さないよう、必ず以下のJSON配列フォーマットのみを出力すること。Markdownの装飾(```json など)や、その他の挨拶・説明文は一切出力してはならない。
+4. 【おすすめの職業（professions）】は、選定した学部・分野の学びに直結し、かつ生徒の興味関心を活かせる「具体的で魅力的な職業」を各順位ごとに3つ提案すること。（例：漠然とした「エンジニア」ではなく「UI/UXデザイナー」や「データサイエンティスト」など、高校生が憧れるような具体的な名称にすること）
+5. 出力は、既存のシステムを壊さないよう、必ず以下のJSON配列フォーマットのみを出力すること。Markdownの装飾(```json など)や、その他の挨拶・説明文は一切出力してはならない。
 
 ### 出力JSONフォーマット
 [
@@ -548,7 +661,7 @@ def _generate_hs_career_json(student_name: str, logs: list, client, model_name: 
         model=model_name,
         contents=prompt,
         config=types.GenerateContentConfig(
-            temperature=0.3,
+            temperature=0.7,
             top_p=0.95,
         )
     )
@@ -580,9 +693,10 @@ def _generate_jhs_career_json(student_name: str, logs: list, client, model_name:
 
 ### 指示・条件
 1. 単調な性格診断や、ありきたりな進路指導（例：「優しい性格です」「普通科が向いています」など）は絶対に避けること。
-2. 生徒のログから読み取れる具体的な行動や思考のクセを「強み」として評価すること。
-3. 【進路に関するアドバイス（advice）】は、この出力において最も重要な項目です。分析した強みを踏まえ、「どのような高校環境が合っているか」「将来どんな分野でその力が活きるか」を**200文字以上250文字程度**で、具体的かつ熱量を持って詳細に語りかけること。
-4. 以下のJSONフォーマットのみを出力すること。Markdownの装飾(```json など)や挨拶文は一切含めないこと。
+2. 生徒全員が同じ学校行事（例：体育祭）について書いている場合でも、一人ひとりの「着眼点」や「感情の動き」の違いを鋭く捉え、**多様な強みや分野を提案してください**。同じような強みや分野ばかりになる偏りを避けること。
+3. 生徒のログから読み取れる具体的な行動や思考のクセを「強み」として評価すること。
+4. 【進路に関するアドバイス（advice）】は、この出力において最も重要な項目です。分析した強みを踏まえ、「どのような高校環境が合っているか」「将来どんな分野でその力が活きるか」を**200文字以上250文字程度**で、具体的かつ熱量を持って詳細に語りかけること。
+5. 以下のJSONフォーマットのみを出力すること。Markdownの装飾(```json など)や挨拶文は一切含めないこと。
 
 ### 出力JSONフォーマット
 {{
@@ -610,7 +724,7 @@ def _generate_jhs_career_json(student_name: str, logs: list, client, model_name:
         model=model_name,
         contents=prompt,
         config=types.GenerateContentConfig(
-            temperature=0.3,
+            temperature=0.7,
             top_p=0.95,
         )
     )
