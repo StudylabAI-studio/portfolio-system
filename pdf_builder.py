@@ -32,21 +32,24 @@ _playwright_installed = False
 def _ensure_playwright_browsers():
     """
     PlaywrightのBrowsers（Chromium）がなければ自動インストールする。
+    --with-depsはsudo権限が必要なため、ブラウザバイナリのみをインストールする。
     """
     global _playwright_installed
     if _playwright_installed:
         return
     try:
-        subprocess.run(
-            [sys.executable, "-m", "playwright", "install", "chromium", "--with-deps"],
-            check=True,
+        result = subprocess.run(
+            [sys.executable, "-m", "playwright", "install", "chromium"],
             capture_output=True,
             timeout=300
         )
-        _playwright_installed = True
+        if result.returncode == 0:
+            _playwright_installed = True
+        else:
+            # エラー内容を無視して続行（次のlaunch()でエラーが出る）
+            _playwright_installed = True  # 試みた事実だけ記録
     except Exception:
-        # インストール失敗しても続行（変換時にエラーが出る）
-        pass
+        _playwright_installed = True  # 試みた事実だけ記録
 
 
 def _html_to_pdf(html_content: str) -> bytes:
@@ -72,7 +75,31 @@ def _html_to_pdf(html_content: str) -> bytes:
     except ImportError:
         raise RuntimeError("Playwrightがインストールされていません。requirements.txtにplaywrightを追加してください。")
     except Exception as e:
+        # Chromiumが見つからない場合、もう一度インストールを試みる
+        if "Executable doesn't exist" in str(e):
+            try:
+                subprocess.run(
+                    [sys.executable, "-m", "playwright", "install", "chromium"],
+                    timeout=300
+                )
+                # 再試行
+                from playwright.sync_api import sync_playwright
+                with sync_playwright() as p:
+                    browser = p.chromium.launch()
+                    page = browser.new_page()
+                    page.set_content(html_content, wait_until="networkidle")
+                    page.wait_for_timeout(800)
+                    pdf_bytes = page.pdf(
+                        format='A4',
+                        print_background=True,
+                        margin={"top": "0", "bottom": "0", "left": "0", "right": "0"}
+                    )
+                    browser.close()
+                return pdf_bytes
+            except Exception as e2:
+                raise RuntimeError(f"PDF生成に失敗しました（Chromiumインストール後も失敗）: {e2}")
         raise RuntimeError(f"PDF生成に失敗しました: {e}")
+
 
 
 
