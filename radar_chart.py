@@ -11,24 +11,17 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as pe
-import matplotlib.font_manager as fm
 
-
-def _get_jp_font():
-    """Windows/Mac/Linuxで利用可能な日本語フォントを取得する。"""
-    candidates = [
-        'Yu Gothic', 'YuGothic', 'Meiryo', 'MS Gothic',
-        'Hiragino Sans', 'Noto Sans CJK JP', 'Noto Sans JP',
-        'IPAexGothic', 'TakaoGothic', 'VL Gothic'
-    ]
-    available = {f.name for f in fm.fontManager.ttflist}
-    for name in candidates:
-        if name in available:
-            return name
-    return None
-
-
-JP_FONT = _get_jp_font()
+# 日本語フォント設定（複数指定によるフォールバック）
+plt.rcParams['font.family'] = [
+    'Noto Sans CJK JP',
+    'Noto Sans JP',
+    'IPAexGothic',
+    'Hiragino Sans',
+    'Yu Gothic',
+    'Meiryo',
+    'sans-serif'
+]
 
 
 def generate_radar_chart(labels: list, scores: list, max_score: float = 5.0, bg_color: str = "#0d1b2a") -> str:
@@ -76,8 +69,7 @@ def generate_radar_chart(labels: list, scores: list, max_score: float = 5.0, bg_
                 color='#2a5fa0', linewidth=1.0, alpha=0.9, linestyle='-')
         # 目盛り数値を表示
         ax.text(angles[0], level, f'{level * max_score:.0f}',
-                ha='center', va='bottom', color='#7ab0e0', fontsize=6,
-                **({'fontfamily': JP_FONT} if JP_FONT else {}))
+                ha='center', va='bottom', color='#7ab0e0', fontsize=6)
 
     # スポークライン（中心から各頂点へ）
     for angle in angles:
@@ -102,14 +94,9 @@ def generate_radar_chart(labels: list, scores: list, max_score: float = 5.0, bg_
     ax.set_xticks(angles)
     label_texts = [f"{label}\n{float(score):.1f}" for label, score in zip(labels, scores)]
 
-    font_props = {}
-    if JP_FONT:
-        font_props['fontfamily'] = JP_FONT
-
     ax.set_xticklabels(label_texts,
                        color='#E3F2FD', fontsize=8.5,
-                       fontweight='bold',
-                       **font_props)
+                       fontweight='bold')
 
     # Y軸非表示
     ax.set_ylim(0, 1)
@@ -163,26 +150,23 @@ def generate_radar_chart_light(labels: list, scores: list, max_score: float = 5.
         ax.plot(angles + [angles[0]], [level] * (N + 1),
                 color='#90CAF9', linewidth=1.0, linestyle='-', alpha=1.0)
         ax.text(angles[0], level, f'{level * max_score:.0f}',
-                ha='center', va='bottom', color='#5090C0', fontsize=6,
-                **({'fontfamily': JP_FONT} if JP_FONT else {}))
+                ha='center', va='bottom', color='#5090C0', fontsize=6)
 
     for angle in angles:
         ax.plot([angle, angle], [0, 1], color='#BBDEFB', linewidth=0.8)
 
-    # 透過性を上げる
-    ax.fill(angles_plot[:-1], scores_plot[:-1], alpha=0.15, color='#1976D2')  # ← 0.25→0.15
-    ax.plot(angles_plot, scores_plot, color='#1976D2', linewidth=2.2)
-    ax.scatter(angles, scores_norm, s=50, color='#1976D2', zorder=5)
+    # 透過性を上げて目盛りが見えるようにしつつ、色はしっかり出す
+    ax.fill(angles_plot[:-1], scores_plot[:-1], alpha=0.35, color='#2196F3')  
+    ax.plot(angles_plot, scores_plot, color='#1565C0', linewidth=2.5)
+    ax.scatter(angles, scores_norm, s=60, color='#1976D2', zorder=5)
 
     label_texts = [f"{l}\n{float(s):.1f}" for l, s in zip(labels, scores)]
     ax.set_xticks(angles)
 
-    font_props = {}
-    if JP_FONT:
-        font_props['fontfamily'] = JP_FONT
-
-    ax.set_xticklabels(label_texts, color='#1A237E', fontsize=8,
-                       fontweight='bold', **font_props)
+    plt.rcParams['font.size'] = 11
+    plt.rcParams['text.color'] = "#002060"
+    ax.set_xticklabels(label_texts,
+                       fontweight='bold', fontsize=10)
 
     ax.set_ylim(0, 1)
     ax.set_yticks([])
@@ -244,21 +228,20 @@ def generate_rpg_chart(labels: list, scores: list, is_dark: bool = False) -> str
         ax.plot([angle, angle], [0, 1], color=grid_color, linewidth=1.5, alpha=0.7)
 
     # データ描画
-    ax.fill(angles_plot[:-1], scores_plot[:-1], alpha=0.3, color=fill_color)
+    ax.fill(angles_plot[:-1], scores_plot[:-1], alpha=0.45, color=fill_color)
     ax.plot(angles_plot, scores_plot, color=line_color, linewidth=3)
     
     # 頂点マーカー（星型など）
-    ax.scatter(angles, scores_norm, s=150, marker='*', color='#FFD54F', zorder=5, edgecolors='#FF6F00', linewidth=1.5)
+    ax.scatter(angles, scores_norm, s=200, marker='*', color='#FFD54F', zorder=5, edgecolors='#FF6F00', linewidth=2.0)
 
     # ラベルと数値
     ax.set_xticks(angles)
     label_texts = [f"{l}\n{int(s)}" for l, s in zip(labels, scores)]
     
-    font_props = {}
-    if JP_FONT:
-        font_props['fontfamily'] = JP_FONT
+    plt.rcParams['font.size'] = 12
+    plt.rcParams['text.color'] = "white" if is_dark else "#37474F"
 
-    ax.set_xticklabels(label_texts, color=text_color, fontsize=10, fontweight='bold', **font_props)
+    ax.set_xticklabels(label_texts, fontweight='bold', fontsize=11)
 
     ax.set_ylim(0, 1)
     ax.set_yticks([])
