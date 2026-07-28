@@ -231,53 +231,68 @@ def evaluate_students_with_gemini(
 def _parse_gemini_csv(raw_text: str, student_name: str) -> dict:
     """GeminiのCSV出力テキストを解析してdictに変換。
 
-    列数ズレ（コメント内の半角カンマ混入）を自動修復する。
+    【設計方針】
+    - 行ごとのカンマ数フィルタを廃止。
+      → 以前のフィルタは「改行入り引用フィールド」を誤って切断していた。
+    - raw text をそのまま csv.reader に渡す。
+      → csv.reader は RFC4180 準拠の引用符・改行を正しく処理できる。
+    - ヘッダー行は「生徒名」「総合評価」を含む行として自動検出する。
+    - データ列がヘッダー列より多い場合（引用符なしカンマ混入）はスマートマージで修復。
     """
     # コードブロックを除去
     code_block = re.search(r'```(?:csv)?\s*\n?(.*?)```', raw_text, re.DOTALL)
     if code_block:
         raw_text = code_block.group(1).strip()
 
-    lines = raw_text.strip().splitlines()
-    csv_lines = [l.strip() for l in lines if l.strip() and l.strip().count(',') >= 2]
-
-    if len(csv_lines) < 2:
-        return None
-
     try:
-        reader = csv.reader(io.StringIO('\n'.join(csv_lines)))
-        rows = list(reader)
-        if len(rows) < 2:
+        # raw text を直接 csv.reader に渡す（行フィルタ不要）
+        reader = csv.reader(io.StringIO(raw_text))
+        all_rows = [row for row in reader if row and any(cell.strip() for cell in row)]
+
+        if len(all_rows) < 1:
             return None
 
-        headers = [h.strip() for h in rows[0]]
-        data    = [v.strip() for v in rows[1]]
+        # ── ヘッダー行の自動検出 ────────────────────────────────────
+        # 「生徒名」「総合評価」を含む行をヘッダーとみなす
+        header_idx = None
+        for i, row in enumerate(all_rows):
+            joined = " ".join(row)
+            if ("生徒名" in joined or "総合評価" in joined) and len(row) >= 3:
+                header_idx = i
+                break
 
-        # ── 列数ズレの自動修復（スマートマージ版） ────────────────────
-        # データ列がヘッダー列より多い場合、テキスト列（根拠・コメント等）に
-        # 半角カンマが混入して列が割れていることがほとんど。
-        # スコア列（数値）の位置を手がかりに最適な結合位置を自動検出する。
+        # 見つからなければ最初の十分な列数の行をヘッダーとみなす
+        if header_idx is None:
+            for i, row in enumerate(all_rows):
+                if len(row) >= 3:
+                    header_idx = i
+                    break
+
+        if header_idx is None or header_idx + 1 >= len(all_rows):
+            return None
+
+        headers = [h.strip() for h in all_rows[header_idx]]
+        data    = [v.strip() for v in all_rows[header_idx + 1]]
+
+        # ── 列数ズレの自動修復（引用符なしカンマ混入対策） ────────────
         if len(data) > len(headers):
             excess = len(data) - len(headers)
 
             def _is_numeric(v: str) -> bool:
                 return bool(re.match(r'^\d+\.?\d*$', v.strip()))
 
-            def _try_merge(data: list, merge_idx: int, excess: int) -> list:
-                if merge_idx + excess >= len(data):
+            def _try_merge(d: list, idx: int, n: int):
+                if idx + n >= len(d):
                     return None
-                merged = ", ".join(data[merge_idx: merge_idx + excess + 1])
-                return data[:merge_idx] + [merged] + data[merge_idx + excess + 1:]
+                merged = ", ".join(d[idx: idx + n + 1])
+                return d[:idx] + [merged] + d[idx + n + 1:]
 
-            # スコア列の期待位置（総合評価=1, 各5科目スコア=3,5,7,9,11）
             score_positions = {1, 3, 5, 7, 9, 11}
-
             best_data = None
             for try_idx in range(2, min(len(data), len(headers) + excess)):
                 candidate = _try_merge(data, try_idx, excess)
                 if candidate is None or len(candidate) != len(headers):
                     continue
-                # スコア列が数値かどうかで整合性を確認
                 ok = all(
                     not _is_numeric(data[i]) or _is_numeric(candidate[i])
                     for i in score_positions if i < len(candidate)
@@ -285,13 +300,11 @@ def _parse_gemini_csv(raw_text: str, student_name: str) -> dict:
                 if ok:
                     best_data = candidate
                     break
-
             if best_data is None:
-                # フォールバック：idx=2 で結合
                 best_data = _try_merge(data, 2, excess) or data
             data = best_data
 
-        # ヘッダーの補正
+        # ── ヘッダーの名前補正 ──────────────────────────────────────
         for i in range(len(headers)):
             if headers[i] in ("根拠", "コメント", "理由", "根拠コメント"):
                 if i > 0 and headers[i-1] not in ("生徒名", "総合評価", "総合コメント", "コメント"):
@@ -299,7 +312,7 @@ def _parse_gemini_csv(raw_text: str, student_name: str) -> dict:
             elif headers[i].endswith("スコア"):
                 headers[i] = headers[i].replace("スコア", "")
 
-        # 辞書化
+        # ── 辞書化 ─────────────────────────────────────────────────
         cleaned = {}
         for h, v in zip(headers, data):
             if h:
@@ -308,13 +321,14 @@ def _parse_gemini_csv(raw_text: str, student_name: str) -> dict:
         if "生徒名" not in cleaned or not cleaned["生徒名"]:
             cleaned["生徒名"] = student_name
 
-        return cleaned
+        return cleaned if len(cleaned) >= 2 else None
+
     except Exception:
         return None
 
 
-
 def group_logs_by_student(df) -> list:
+
     """
     DataFrameから生徒ごとにライフログをグループ化する。
     Returns:
