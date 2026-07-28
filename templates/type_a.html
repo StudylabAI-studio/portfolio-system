@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ポートフォリオ - {{ student_name }}</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Playfair+Display:wght@600;700&family=Cormorant+Garamond:wght@600;700&display=swap');
   * { margin: 0; padding: 0; box-sizing: border-box; }
   @page { size: A4; margin: 0; }
   body {
@@ -103,28 +103,38 @@
   }
 
   /* メインコンテンツ */
-  .content { display: flex; flex: 1; gap: 0; overflow: visible; }
+  .content { display: flex; flex: 1; gap: 0; overflow: visible; min-height: 0; }
 
   /* 左側：レーダーチャート */
   .left-panel {
-    width: 48%; padding: 16px 12px 16px 28px;
-    display: flex; flex-direction: column; gap: 12px;
+    width: 46%; padding: 12px 8px 12px 24px;
+    display: flex; flex-direction: column; gap: 10px;
   }
+  .left-panel > div { display: flex; flex-direction: column; flex: 1; }
   .section-title {
     font-size: 11px; font-weight: 700; color: #1565C0;
     letter-spacing: 0.08em; text-transform: uppercase;
     border-left: 3px solid #42A5F5; padding-left: 8px;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
+  }
+  /* 評価項目詳細の見出しフォント（右パネル専用） */
+  .section-title-detail {
+    font-family: 'Playfair Display', 'Cormorant Garamond', 'Noto Serif JP', Georgia, serif;
+    font-size: 15px; font-weight: 700; color: #1565C0;
+    letter-spacing: 0.06em;
+    border-left: 3px solid #42A5F5; padding-left: 10px;
+    margin-bottom: 8px;
   }
   .chart-wrapper {
     background: #F0F4FF; border-radius: 12px;
-    padding: 10px; display: flex; justify-content: center;
+    padding: 8px; display: flex; justify-content: center; align-items: center;
+    flex: 1;
   }
-  .chart-wrapper img { width: 100%; max-width: 240px; }
+  .chart-wrapper img { width: 100%; max-width: 300px; height: auto; }
 
   /* 右側：評価項目リスト */
   .right-panel {
-    width: 52%; padding: 16px 28px 16px 12px;
+    width: 54%; padding: 12px 24px 12px 10px;
     display: flex; flex-direction: column; gap: {{ sc_gap }};
     border-left: 1px solid #E3F2FD;
   }
@@ -150,13 +160,13 @@
   /* コメント欄 */
   .comment-section {
     background: linear-gradient(135deg, #E8F5E9, #F1F8E9);
-    margin: 8px 22px;
-    padding: 14px 18px;
+    margin: 4px 22px 6px;
+    padding: 12px 18px;
     border-radius: 12px;
     border-left: 4px solid #66BB6A;
   }
-  .comment-title { font-size: 10px; font-weight: 700; color: #2E7D32; margin-bottom: 5px; }
-  .comment-text { font-size: 9.5px; color: #37474F; line-height: 1.7; }
+  .comment-title { font-size: 11px; font-weight: 700; color: #2E7D32; margin-bottom: 5px; }
+  .comment-text { font-size: 10.5px; color: #37474F; line-height: 1.75; }
 
   /* フッター */
   .footer {
@@ -236,7 +246,7 @@
     <div class="content">
       <!-- 左パネル：チャート -->
       <div class="left-panel">
-        <div>
+        <div style="display:flex; flex-direction:column; flex:1;">
           <div class="section-title">📊 能力レーダーチャート</div>
           <div class="chart-wrapper">
             {% if chart_b64 %}
@@ -250,7 +260,7 @@
 
       <!-- 右パネル：評価項目 -->
       <div class="right-panel">
-        <div class="section-title">📈 評価項目詳細</div>
+        <div class="section-title-detail">📈 評価項目詳細</div>
         {% for item in score_items %}
         <div class="score-item">
           <div class="score-item-header">
