@@ -82,7 +82,7 @@ CSVの各列には以下の内容を必ず出力してください：
 ・スキル1効果〜2効果: その効果の解説（テキストの「〜〜」という言葉から分析。〇〇の効果がある）
 ・鑑定書: なぜこのジョブとステータスになったのか、テキストの分析結果を交えたギルドマスターからの熱い鑑定メッセージ（200文字程度）
 """
-    else:
+    elif target_grade == "中学生":
         extra_columns = ",おすすめ学部,学部理由,おすすめ職業,職業理由"
         extra_example = ",情報学部,プログラミングへの関心が高いから,データサイエンティスト,分析力が活かせるから"
         extra_instruction = f"""
@@ -91,6 +91,10 @@ CSVの各列には以下の内容を必ず出力してください：
 1. おすすめの大学学部（例：経済学部、情報学部など）とその理由
 2. おすすめの職業（例：システムエンジニア、企画営業など）とその理由
 """
+    else:  # 高校生など
+        extra_columns = ""
+        extra_example = ""
+        extra_instruction = ""
 
     if use_rubric_items:
         output_instruction = f"""
@@ -277,6 +281,16 @@ def evaluate_single_student(
         raw_text = response.text
         parsed = _parse_gemini_csv(raw_text, name, expected_headers)
         if parsed:
+            # ＝＝＝ ここから高校生向けの第2段階（Two-Stage）評価 ＝＝＝
+            if target_grade == "高校生":
+                try:
+                    hs_json_str = _generate_hs_career_json(name, logs, client, model_name)
+                    parsed["hs_career_json"] = hs_json_str
+                except Exception as json_e:
+                    # JSON取得失敗時は既存機能を止めないようにログだけ出力
+                    print(f"高校生JSON取得エラー({name}): {json_e}")
+            # ＝＝＝ ここまで ＝＝＝
+            
             return parsed, None
         else:
             err = f"{name}：CSV解析失敗 → {raw_text[:120]}"
@@ -451,3 +465,98 @@ def results_to_csv_bytes(results: list) -> bytes:
     for r in results:
         writer.writerow(r)
     return buf.getvalue().encode('utf-8-sig')
+
+
+def _generate_hs_career_json(student_name: str, logs: list, client, model_name: str) -> str:
+    """高校生向け第2段階評価：キャリアコンサルタントとしてJSONを出力する"""
+    log_block = ""
+    for i, log in enumerate(logs, 1):
+        theme = log.get("テーマ名", "（テーマなし）")
+        content = log.get("ライフログ内容", "")
+        if content and str(content) != "nan":
+            log_block += f"\n【ログ{i}】テーマ：{theme}\n{content}\n"
+
+    if not log_block.strip():
+        log_block = "（ライフログの記録なし）"
+
+    prompt = f"""あなたは、生徒の隠れた才能や可能性を引き出す、経験豊富で非常に優秀な進路指導専門のキャリアコンサルタントです。
+システムから入力される生徒のログデータやコメント（興味、関心、将来の夢、得意科目、日常の些細な行動など）を深く分析し、指定された【学部・学科リスト】の中から、その生徒の適性に最も合致する学部・分野を1位から3位まで判定してください。
+
+### 指示・条件
+1. 必ず【学部・学科リスト】に存在する「学部名」と「分野名」の組み合わせから選定すること。
+2. 【選定理由（reason）】は、**必ず100文字以上150文字程度**の丁寧で温かみのある文章で作成すること。以下の構成を必ず含めてください。
+   - ① ログから読み取れる生徒の強みや適性への共感と分析
+   - ② その学部・分野に進むことで、具体的にどのような知識やスキルが身につくか
+   - ③ その学びが、生徒の将来の可能性をどう広げるか
+3. 【おすすめの職業（professions）】は、選定した学部・分野の学びに直結し、かつ生徒の興味関心を活かせる「具体的で魅力的な職業」を各順位ごとに3つ提案すること。（例：漠然とした「エンジニア」ではなく「UI/UXデザイナー」や「データサイエンティスト」など、高校生が憧れるような具体的な名称にすること）
+4. 出力は、既存のシステムを壊さないよう、必ず以下のJSON配列フォーマットのみを出力すること。Markdownの装飾(```json など)や、その他の挨拶・説明文は一切出力してはならない。
+
+### 出力JSONフォーマット
+[
+  {{
+    "rank": 1,
+    "faculty": "学部名",
+    "department": "分野名",
+    "reason": "ここに100文字以上の、生徒に寄り添った丁寧で説得力のある解説文を出力します。",
+    "professions": ["具体的な職業名1", "具体的な職業名2", "具体的な職業名3"]
+  }},
+  {{
+    "rank": 2,
+    "faculty": "学部名",
+    "department": "分野名",
+    "reason": "ここに100文字以上の、生徒に寄り添った丁寧で説得力のある解説文を出力します。",
+    "professions": ["具体的な職業名1", "具体的な職業名2", "具体的な職業名3"]
+  }},
+  {{
+    "rank": 3,
+    "faculty": "学部名",
+    "department": "分野名",
+    "reason": "ここに100文字以上の、生徒に寄り添った丁寧で説得力のある解説文を出力します。",
+    "professions": ["具体的な職業名1", "具体的な職業名2", "具体的な職業名3"]
+  }}
+]
+
+### 学部・学科リスト
+・文学部（文学、史学・地理学、哲学、心理学）
+・外国語学部（語学）
+・人文・教養・人間科学部（文化学、教養学、総合科学、人間科学／人文系その他）
+・教育・教員養成系学部（教育学、小学校・幼稚園課程、中等教育課程、特別支援教育課程、養護教諭課程）
+・法学部（法学、政治学・政策学）
+・経済・経営・商学部（経済学、経営学・経営情報学・商学・会計学）
+・社会・社会福祉学部（社会学・観光学・メディア学、社会福祉学）
+・国際関係学部（国際関係学・国際文化学）
+・理学部（数学・情報科学、物理学、化学、生物学・生命科学、地学、環境科学／その他）
+・工学部（機械工学、電気・電子工学、情報工学、土木工学、建築学、原子力工学、応用物理学、応用化学、生物工学、資源工学、材料工学、航空・宇宙工学、経営工学・管理工学、船舶・海洋工学・商船学、医用・生体工学、光工学分野／その他）
+・農・獣医畜産・水産学部（農学、農芸化学、農業工学、農業経済学、森林科学、獣医学、畜産学・動物学、水産学、生物生産・生物資源学）
+・医学部（医学）
+・歯学部（歯学）
+・薬学部（薬学）
+・看護・医療・栄養学部（看護学、医療・保健学、栄養学）
+・家政・生活科学部（家政・生活科学、食物学、被服学、住居学、児童学・子ども学）
+・体育・健康科学部（体育・健康科学）
+・芸術学部（美術、デザイン、工芸、音楽、芸術系その他（CG等含む））
+
+【生徒名】
+{student_name}
+
+【ライフログ】
+{log_block}
+"""
+    from google.genai import types
+    response = client.models.generate_content(
+        model=model_name,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            temperature=0.3,
+            top_p=0.95,
+        )
+    )
+    # Markdownブロックがあれば除去する
+    text = response.text.strip()
+    if text.startswith("```json"):
+        text = text[7:]
+    elif text.startswith("```"):
+        text = text[3:]
+    if text.endswith("```"):
+        text = text[:-3]
+    return text.strip()

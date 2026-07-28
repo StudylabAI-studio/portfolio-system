@@ -316,8 +316,29 @@
         </div>
       </div>
       
+      {% elif target_grade == '高校生' and extra_data.career_ranking %}
+      <!-- 高校生向け：トップ3進路提案 -->
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        {% for rank_data in extra_data.career_ranking %}
+        <div style="background: white; border: 1px solid #DDE3EE; border-radius: 12px; padding: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+          <div style="display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #E3F2FD; padding-bottom: 4px; margin-bottom: 8px;">
+            <div style="font-size: 16px; font-weight: 800; color: #1A2340;">
+              <span style="color: #1565C0; margin-right: 8px;">第{{ rank_data.rank }}位</span>{{ rank_data.faculty }} / {{ rank_data.department }}
+            </div>
+          </div>
+          <div style="font-size: 12px; color: #455A8A; line-height: 1.5; margin-bottom: 8px;">{{ rank_data.reason }}</div>
+          <div style="font-size: 11px; color: #1565C0; font-weight: bold; margin-bottom: 4px;">▼ おすすめの職業</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+            {% for job in rank_data.professions %}
+            <span style="background: #E3F2FD; color: #1565C0; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: bold;">{{ job }}</span>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      
       {% else %}
-      <!-- 中学生・高校生向け：進路提案 -->
+      <!-- 中学生向け：進路提案 -->
       <div style="display: flex; flex-direction: column; gap: 20px;">
         <div style="background: white; border: 1px solid #DDE3EE; border-radius: 12px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
           <div style="font-size: 12px; color: #1565C0; font-weight: bold; margin-bottom: 5px; letter-spacing: 0.1em;">RECOMMENDED FACULTY</div>

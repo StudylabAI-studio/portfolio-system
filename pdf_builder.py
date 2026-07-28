@@ -379,7 +379,21 @@ def _build_template_context(row: dict, template_type: str,
         is_dark = "Premium C" in template_type or "Premium A" in template_type
         rpg_chart_b64 = generate_rpg_chart(rpg_labels, rpg_scores, is_dark=is_dark)
         
-    else:
+    elif target_grade == "高校生":
+        import json
+        career_json_str = row.get("hs_career_json", "")
+        career_data = []
+        if career_json_str:
+            try:
+                career_data = json.loads(career_json_str)
+            except Exception as e:
+                print(f"JSON Parse Error: {e}")
+                career_data = []
+        extra_data = {
+            "career_ranking": career_data
+        }
+        
+    else:  # 中学生
         extra_data = {
             "recommended_faculty": row.get("おすすめ学部", ""),
             "faculty_reason": row.get("学部理由", ""),
