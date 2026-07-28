@@ -378,63 +378,79 @@ with tab2:
                 st.caption(f"評価対象：**{len(target_students)}名**（全員）")
 
 
-        # ── 評価実行中（STOP可能UI） ────────────────────────────────
+        # ── 評価実行中 ─────────────────────────────────────────────
         if st.session_state.get("eval_running", False):
-            done = len(st.session_state.eval_results)
-            total = done + len(st.session_state.eval_queue)
-            pct = int(done / total * 100) if total > 0 else 0
-            
-            st.progress(pct)
-            st.markdown(f"⏳ **評価中... {done}/{total} 名完了**")
+            import threading
+            from concurrent.futures import ThreadPoolExecutor, as_completed
 
-            # STOPボタン
-            if st.button("⏹️ 評価をSTOPする", type="secondary", use_container_width=True, key="stop_btn"):
-                st.session_state.stop_eval = True
-                st.session_state.eval_running = False
-                st.warning(f"⏹️ 評価を中断しました（{done}名分の結果は保持されています）")
-                st.rerun()
+            target_all = st.session_state.get("eval_target", [])
+            n_total = len(target_all)
+            expected_headers = st.session_state.get("eval_headers", None)
 
-            # 1名ずつ処理して再描画
-            if st.session_state.eval_queue and not st.session_state.stop_eval:
-                next_student = st.session_state.eval_queue[0]
-                expected_headers = st.session_state.get("eval_headers", None)
-                with st.spinner(f"💬 {next_student['name']} さんの評価を生成中..."):
-                    import time
-                    time.sleep(0.5) # レート制限対策
-                    result, err = evaluate_single_student(
-                        student=next_student,
-                        rubric_text=effective_rubric,
-                        api_key=API_KEY,
-                        model_name=selected_model,
-                        use_rubric_items=use_rubric_items,
-                        target_grade=target_grade,
-                        expected_headers=expected_headers
-                    )
-                
-                # 初回の成功時にヘッダー構造を記憶しておく（AIが2人目以降でヘッダーを省略・改変した場合の強制補正用）
-                if not expected_headers and result and "総合評価" in result:
-                    # 後から追加されたJSONキーなどはプロンプトに渡さないよう除外する
-                    exclude_for_prompt = {"hs_career_json", "jhs_career_json"}
-                    st.session_state.eval_headers = [k for k in result.keys() if k not in exclude_for_prompt]
-
-                st.session_state.eval_results.append(result)
-                if err:
-                    st.session_state.eval_errors.append(err)
-                
-                # キューから削除
-                st.session_state.eval_queue = st.session_state.eval_queue[1:]
-
-                # 完了判定
-                if not st.session_state.eval_queue:
+            progress_bar = st.progress(0.0, text=f"⏳ 評価を開始しています…（{n_total}名）")
+            status_text = st.empty()
+            stop_col, _ = st.columns([1, 3])
+            with stop_col:
+                if st.button("⏹️ 評価をSTOPする", type="secondary", use_container_width=True, key="stop_btn"):
+                    st.session_state.stop_eval = True
                     st.session_state.eval_running = False
-                    st.success(f"🎉 評価完了！{len(st.session_state.eval_results)}名分の評価結果が生成されました。")
-                    if st.session_state.eval_errors:
-                        with st.expander("⚠️ エラー詳細"):
-                            for e in st.session_state.eval_errors:
-                                st.warning(e)
-                
-                # 次の生徒へ（UIを更新させる）
-                st.rerun()
+                    st.warning("⏹️ 評価を中断しました")
+                    st.rerun()
+
+            completed_count = [0]
+            lock = threading.Lock()
+            results_ordered = [None] * n_total
+            errors_list = []
+            stop_event = threading.Event()
+
+            def _eval_one(idx, student):
+                import time
+                if stop_event.is_set():
+                    return idx, None, None
+                time.sleep(0.3 * (idx % 3))
+                result, err = evaluate_single_student(
+                    student=student,
+                    rubric_text=effective_rubric,
+                    api_key=API_KEY,
+                    model_name=selected_model,
+                    use_rubric_items=use_rubric_items,
+                    target_grade=target_grade,
+                    expected_headers=expected_headers
+                )
+                with lock:
+                    completed_count[0] += 1
+                return idx, result, err
+
+            max_workers = min(3, n_total) if n_total > 0 else 1
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = [executor.submit(_eval_one, i, s) for i, s in enumerate(target_all)]
+                for future in as_completed(futures):
+                    if st.session_state.get("stop_eval", False):
+                        stop_event.set()
+                        break
+                    idx, result, err = future.result()
+                    if result is not None:
+                        results_ordered[idx] = result
+                    if err:
+                        errors_list.append(err)
+                    done = completed_count[0]
+                    pct = done / n_total if n_total > 0 else 1.0
+                    progress_bar.progress(pct, text=f"⏳ {done}/{n_total}名完了")
+                    names_done = [s["name"] for s in target_all[:done]]
+                    status_text.caption(f"完了：{' / '.join(names_done[-3:])}{'...' if done > 3 else ''}")
+
+            st.session_state.eval_results = [r for r in results_ordered if r is not None]
+            st.session_state.eval_errors = errors_list
+            st.session_state.eval_running = False
+            st.session_state.eval_queue = []
+            n_done = len(st.session_state.eval_results)
+            if n_done > 0:
+                st.success(f"🎉 評価完了！{n_done}名分の評価結果が生成されました。")
+            if errors_list:
+                with st.expander("⚠️ エラー詳細"):
+                    for e in errors_list:
+                        st.warning(e)
+            st.rerun()
 
         # ── 評価待機中 ──────────────────────────────────────────────
         else:
@@ -447,16 +463,15 @@ with tab2:
                 )
 
             if run_btn:
-                # 評価キューの初期化
+                # 評価ターゲットの初期化
                 st.session_state.eval_results = []
                 st.session_state.eval_errors = []
-                st.session_state.eval_queue = list(target_students)
+                st.session_state.eval_target = list(target_students)  # 並列処理用：全対象を保存
+                st.session_state.eval_queue = []  # 旧方式との互換性のため
                 st.session_state.eval_running = True
                 st.session_state.stop_eval = False
 
                 # ── ルーブリック項目名から固定ヘッダーを事前に組み立てる ──
-                # use_rubric_items=True かつ rubric_item_labels がある場合、
-                # 最初から全員に同じ列名を強制することで二重列・ズレを完全防止
                 rubric_labels = st.session_state.get("rubric_item_labels", [])
                 if use_rubric_items and rubric_labels:
                     fixed_headers = ["生徒名", "総合評価", "総合コメント"]
