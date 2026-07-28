@@ -253,15 +253,43 @@ def _parse_gemini_csv(raw_text: str, student_name: str) -> dict:
         headers = [h.strip() for h in rows[0]]
         data    = [v.strip() for v in rows[1]]
 
-        # ── 列数ズレの自動修復 ──────────────────────────────────────
-        # データ列がヘッダー列より多い場合、コメント系フィールドに
-        # 半角カンマが混入して列が割れている可能性が高い。
-        # 「総合コメント」(idx=2)の超過分を結合して列数を揃える。
+        # ── 列数ズレの自動修復（スマートマージ版） ────────────────────
+        # データ列がヘッダー列より多い場合、テキスト列（根拠・コメント等）に
+        # 半角カンマが混入して列が割れていることがほとんど。
+        # スコア列（数値）の位置を手がかりに最適な結合位置を自動検出する。
         if len(data) > len(headers):
             excess = len(data) - len(headers)
-            merge_idx = 2 if len(data) > 2 else 0
-            merged_val = ", ".join(data[merge_idx: merge_idx + excess + 1])
-            data = data[:merge_idx] + [merged_val] + data[merge_idx + excess + 1:]
+
+            def _is_numeric(v: str) -> bool:
+                return bool(re.match(r'^\d+\.?\d*$', v.strip()))
+
+            def _try_merge(data: list, merge_idx: int, excess: int) -> list:
+                if merge_idx + excess >= len(data):
+                    return None
+                merged = ", ".join(data[merge_idx: merge_idx + excess + 1])
+                return data[:merge_idx] + [merged] + data[merge_idx + excess + 1:]
+
+            # スコア列の期待位置（総合評価=1, 各5科目スコア=3,5,7,9,11）
+            score_positions = {1, 3, 5, 7, 9, 11}
+
+            best_data = None
+            for try_idx in range(2, min(len(data), len(headers) + excess)):
+                candidate = _try_merge(data, try_idx, excess)
+                if candidate is None or len(candidate) != len(headers):
+                    continue
+                # スコア列が数値かどうかで整合性を確認
+                ok = all(
+                    not _is_numeric(data[i]) or _is_numeric(candidate[i])
+                    for i in score_positions if i < len(candidate)
+                )
+                if ok:
+                    best_data = candidate
+                    break
+
+            if best_data is None:
+                # フォールバック：idx=2 で結合
+                best_data = _try_merge(data, 2, excess) or data
+            data = best_data
 
         # ヘッダーの補正
         for i in range(len(headers)):
