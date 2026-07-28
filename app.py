@@ -320,15 +320,63 @@ with tab2:
         """, unsafe_allow_html=True)
 
         # 評価対象の絞り込み
-        with st.expander("⚙️ 評価対象を絞り込む（任意）"):
-            all_names = [s["name"] for s in students_list]
-            selected_names = st.multiselect(
-                "評価する生徒を選択（未選択 = 全員）",
-                options=all_names,
-                default=[]
-            )
-            target_students = [s for s in students_list if s["name"] in selected_names] if selected_names else students_list
-            st.caption(f"評価対象：{len(target_students)}名")
+        with st.expander("⚙️ 評価対象を絞り込む（任意）", expanded=False):
+
+            # ── グループ一覧を取得 ──
+            all_groups = sorted(set(
+                g.strip()
+                for s in students_list
+                for g in (s.get("group") or "").split(",")
+                if g.strip()
+            ))
+
+            col_grp, col_ind = st.columns([1, 1])
+
+            with col_grp:
+                st.markdown("**① グループで絞り込む**")
+                selected_groups = st.multiselect(
+                    "グループを選択（未選択 = 全グループ）",
+                    options=all_groups,
+                    default=[],
+                    key="filter_groups"
+                )
+
+            # グループで絞った生徒リスト
+            if selected_groups:
+                group_filtered = [
+                    s for s in students_list
+                    if any(
+                        g in selected_groups
+                        for g in s.get("groups", s.get("group", "").split(","))
+                    )
+                ]
+            else:
+                group_filtered = students_list
+
+
+            with col_ind:
+                st.markdown("**② 個人で絞り込む（任意）**")
+                filtered_names = [s["name"] for s in group_filtered]
+                selected_names = st.multiselect(
+                    "生徒を個別選択（未選択 = 上記全員）",
+                    options=filtered_names,
+                    default=[],
+                    key="filter_names"
+                )
+
+            # 最終的な評価対象
+            if selected_names:
+                target_students = [s for s in group_filtered if s["name"] in selected_names]
+            else:
+                target_students = group_filtered
+
+            # 対象人数の表示
+            if selected_groups:
+                grp_label = " ／ ".join(selected_groups)
+                st.caption(f"📌 グループ：{grp_label}　→　評価対象：**{len(target_students)}名**")
+            else:
+                st.caption(f"評価対象：**{len(target_students)}名**（全員）")
+
 
         # ── 評価実行中（STOP可能UI） ────────────────────────────────
         if st.session_state.get("eval_running", False):

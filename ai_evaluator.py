@@ -516,13 +516,20 @@ def group_logs_by_student(df) -> list:
                     "メイングループ": str(row.get("メイングループ", "")) if pd.notna(row.get("メイングループ")) else "",
                 })
 
+        # メイングループの値を取得（カンマ区切り複合値に対応）
+        raw_group = logs[0].get("メイングループ", "") if logs else ""
+        # カンマ区切りで複数グループに所属している場合、全部リストとして保持
+        group_list = [g.strip() for g in str(raw_group).split(",") if g.strip() and g.strip() != "nan"]
+
         students.append({
             "name": full_name,
             "user_id": user_id,
             "logs": logs,
             "log_count": len(logs),
-            "group": logs[0].get("メイングループ", "") if logs else ""
+            "group": ", ".join(group_list),   # 表示用（カンマ区切り文字列）
+            "groups": group_list,              # フィルタ用（リスト）
         })
+
 
     return students
 
