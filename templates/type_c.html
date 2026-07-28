@@ -152,6 +152,19 @@
 </style>
 </head>
 <body>
+{% set sc_len = score_items|length %}
+{% if sc_len <= 3 %}
+  {% set sc_gap = "18px" %}{% set sc_pad = "12px 14px" %}{% set sc_reason_size = "9px" %}
+{% elif sc_len == 4 %}
+  {% set sc_gap = "12px" %}{% set sc_pad = "10px 12px" %}{% set sc_reason_size = "9px" %}
+{% elif sc_len == 5 %}
+  {% set sc_gap = "8px" %}{% set sc_pad = "8px 12px" %}{% set sc_reason_size = "8px" %}
+{% elif sc_len == 6 %}
+  {% set sc_gap = "5px" %}{% set sc_pad = "5px 10px" %}{% set sc_reason_size = "7.5px" %}
+{% else %}
+  {% set sc_gap = "3px" %}{% set sc_pad = "4px 8px" %}{% set sc_reason_size = "7px" %}
+{% endif %}
+
   {% if logo_b64 and logo_position == 'center' %}
   <img class="watermark" src="{{ logo_b64 }}" alt="logo">
   {% endif %}

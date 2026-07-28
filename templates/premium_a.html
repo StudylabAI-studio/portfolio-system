@@ -91,7 +91,7 @@
   .content { flex: 1; display: flex; padding: 14px 30px; gap: 18px; overflow: visible; position: relative; z-index: 1; }
 
   .left-panel { width: 46%; }
-  .right-panel { width: 54%; display: flex; flex-direction: column; gap: 9px; }
+  .right-panel { width: 54%; display: flex; flex-direction: column; gap: {{ sc_gap }}; }
 
   .panel-label {
     font-size: 9px; color: #D4AF37; letter-spacing: 0.25em;
@@ -111,14 +111,14 @@
   .score-item {
     background: rgba(212,175,55,0.04); border-radius: 8px;
     border: 1px solid rgba(212,175,55,0.12);
-    padding: 6px 10px; margin-bottom: 4px;
+    padding: {{ sc_pad }}; margin-bottom: 2px;
   }
   .si-header { display: flex; justify-content: space-between; margin-bottom: 2px; align-items: center; }
   .si-label { font-size: 11px; font-weight: 700; color: #BBDEFB; }
   .si-val { font-size: 12px; font-weight: 700; color: #F5D78C; }
   .si-bar-bg { height: 4px; background: rgba(212,175,55,0.1); border-radius: 2px; overflow: hidden; margin-bottom: 4px; }
   .si-bar-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, #B8960C, #F5D78C); }
-  .si-reason { font-size: 8px; color: #E3F2FD; line-height: 1.5; text-align: justify; margin-top: 3px; }
+  .si-reason { font-size: {{ sc_reason_size }}; color: #E3F2FD; line-height: 1.5; text-align: justify; margin-top: 2px; }
   /* 部分塗り星 */
   .gs-partial { display: inline-block; position: relative; color: rgba(212,175,55,0.2); font-size: 22px; }
   .gs-partial::before { content: '★'; position: absolute; left:0; top:0; color: #D4AF37; overflow: hidden; width: var(--pct,50%); white-space: nowrap; }
@@ -160,6 +160,19 @@
 </style>
 </head>
 <body>
+{% set sc_len = score_items|length %}
+{% if sc_len <= 3 %}
+  {% set sc_gap = "18px" %}{% set sc_pad = "12px 14px" %}{% set sc_reason_size = "9px" %}
+{% elif sc_len == 4 %}
+  {% set sc_gap = "12px" %}{% set sc_pad = "9px 12px" %}{% set sc_reason_size = "8.5px" %}
+{% elif sc_len == 5 %}
+  {% set sc_gap = "9px" %}{% set sc_pad = "6px 10px" %}{% set sc_reason_size = "8px" %}
+{% elif sc_len == 6 %}
+  {% set sc_gap = "5px" %}{% set sc_pad = "4px 8px" %}{% set sc_reason_size = "7.5px" %}
+{% else %}
+  {% set sc_gap = "3px" %}{% set sc_pad = "3px 7px" %}{% set sc_reason_size = "7px" %}
+{% endif %}
+
   {% if logo_b64 and logo_position == 'center' %}
   <img class="watermark" src="{{ logo_b64 }}" alt="logo">
   {% endif %}
