@@ -229,7 +229,10 @@ def evaluate_students_with_gemini(
 
 
 def _parse_gemini_csv(raw_text: str, student_name: str) -> dict:
-    """GeminiのCSV出力テキストを解析してdictに変換。"""
+    """GeminiのCSV出力テキストを解析してdictに変換。
+
+    列数ズレ（コメント内の半角カンマ混入）を自動修復する。
+    """
     # コードブロックを除去
     code_block = re.search(r'```(?:csv)?\s*\n?(.*?)```', raw_text, re.DOTALL)
     if code_block:
@@ -244,18 +247,28 @@ def _parse_gemini_csv(raw_text: str, student_name: str) -> dict:
     try:
         reader = csv.reader(io.StringIO('\n'.join(csv_lines)))
         rows = list(reader)
-        if len(rows) < 2: return None
+        if len(rows) < 2:
+            return None
 
         headers = [h.strip() for h in rows[0]]
-        data = [v.strip() for v in rows[1]]
+        data    = [v.strip() for v in rows[1]]
 
-        # ヘッダーの重複や「根拠」という曖昧な名前を補正する
-        # 例: ['課題発見', '根拠', '説明力', '根拠'] -> ['課題発見', '課題発見_根拠', '説明力', '説明力_根拠']
+        # ── 列数ズレの自動修復 ──────────────────────────────────────
+        # データ列がヘッダー列より多い場合、コメント系フィールドに
+        # 半角カンマが混入して列が割れている可能性が高い。
+        # 「総合コメント」(idx=2)の超過分を結合して列数を揃える。
+        if len(data) > len(headers):
+            excess = len(data) - len(headers)
+            merge_idx = 2 if len(data) > 2 else 0
+            merged_val = ", ".join(data[merge_idx: merge_idx + excess + 1])
+            data = data[:merge_idx] + [merged_val] + data[merge_idx + excess + 1:]
+
+        # ヘッダーの補正
         for i in range(len(headers)):
             if headers[i] in ("根拠", "コメント", "理由", "根拠コメント"):
                 if i > 0 and headers[i-1] not in ("生徒名", "総合評価", "総合コメント", "コメント"):
                     headers[i] = f"{headers[i-1]}_根拠"
-            elif headers[i].endswith("スコア"): # 万が一AIがスコアと付けた場合
+            elif headers[i].endswith("スコア"):
                 headers[i] = headers[i].replace("スコア", "")
 
         # 辞書化
@@ -263,15 +276,14 @@ def _parse_gemini_csv(raw_text: str, student_name: str) -> dict:
         for h, v in zip(headers, data):
             if h:
                 cleaned[h] = v
-        
+
         if "生徒名" not in cleaned or not cleaned["生徒名"]:
             cleaned["生徒名"] = student_name
-            
+
         return cleaned
     except Exception:
         return None
 
-    return None
 
 
 def group_logs_by_student(df) -> list:
