@@ -5,14 +5,17 @@ Jinja2テンプレートとPlaywrightを使って、
 """
 import os
 import io
+import sys
 import base64
 import zipfile
 import json
 import math
+import subprocess
 import tempfile
 import traceback
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
+
 
 # レーダーチャートモジュール
 from radar_chart import generate_radar_chart, generate_radar_chart_light
@@ -23,11 +26,35 @@ TEMPLATES_DIR = Path(__file__).parent / "templates"
 DEFAULT_SCORE_LABELS = ["自己管理", "思考力・探究心", "コミュニケーション", "主体性・行動力", "協働・共創力"]
 
 
+# Playwright Chromiumの自動インストール（クラウド・ローカル共通）
+_playwright_installed = False
+
+def _ensure_playwright_browsers():
+    """
+    PlaywrightのBrowsers（Chromium）がなければ自動インストールする。
+    """
+    global _playwright_installed
+    if _playwright_installed:
+        return
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "playwright", "install", "chromium", "--with-deps"],
+            check=True,
+            capture_output=True,
+            timeout=300
+        )
+        _playwright_installed = True
+    except Exception:
+        # インストール失敗しても続行（変換時にエラーが出る）
+        pass
+
+
 def _html_to_pdf(html_content: str) -> bytes:
     """
     HTML文字列をPDFバイト列に変換する。
-    ローカル環境のPlaywrightを使用。Streamlit Cloudでは非対応としてエラーを返す。
+    Playwright（Chromium）を使用。初回実行時にブラウザを自動インストールする。
     """
+    _ensure_playwright_browsers()
     try:
         from playwright.sync_api import sync_playwright
         with sync_playwright() as p:
@@ -43,10 +70,10 @@ def _html_to_pdf(html_content: str) -> bytes:
             browser.close()
         return pdf_bytes
     except ImportError:
-        # Streamlit Cloud等、Playwrightがインストールされていない環境用
-        raise RuntimeError("【クラウド環境制限】このデモ版ではPDF一括生成機能は利用できません。評価ダッシュボードのみご利用いただけます。")
+        raise RuntimeError("Playwrightがインストールされていません。requirements.txtにplaywrightを追加してください。")
     except Exception as e:
         raise RuntimeError(f"PDF生成に失敗しました: {e}")
+
 
 
 
