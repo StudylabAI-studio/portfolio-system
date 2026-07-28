@@ -96,11 +96,11 @@ CSVの各列には以下の内容を必ず出力してください：
         output_instruction = f"""
 【出力形式】
 必ずCSV形式のみで回答してください（説明文・コードブロックは不要）。
-ヘッダー行とデータ行の2行だけを出力してください。
+必ず「ヘッダー行」と「データ行」の合計2行を出力してください。ヘッダー行を省略するとシステムエラーになるため絶対に省略しないでください。
 
 【ヘッダー作成の厳密なルール】
-1. ヘッダーは必ず以下のように作成してください。
-   生徒名,総合評価,総合コメント,（実際の評価項目1）,（実際の評価項目1）_根拠,（実際の評価項目2）,（実際の評価項目2）_根拠,...{extra_columns}
+1. ヘッダー行は必ず以下のフォーマットで出力してください。
+生徒名,総合評価,総合コメント,（実際の評価項目1）,（実際の評価項目1）_根拠,（実際の評価項目2）,（実際の評価項目2）_根拠,...{extra_columns}
 2. 根拠コメントの列名は、必ず「評価項目名」に「_根拠」という文字を直接くっつけた名前にしてください（例：「課題発見_根拠」）。「根拠」という単体や別の名前はNGです。
 3. （最重要）データ行の各根拠コメントの中には、絶対に半角カンマ(,)を含めないでください。カンマは全角の「、」に置き換えてください。
 """
@@ -115,7 +115,8 @@ CSVの各列には以下の内容を必ず出力してください：
         output_instruction = f"""
 【出力形式】
 必ずCSV形式のみで回答してください（説明文・コードブロックは不要）。
-ヘッダー行とデータ行の2行だけを出力してください。
+必ず「ヘッダー行」と「データ行」の合計2行を出力してください。ヘッダー行を省略するとシステムエラーになるため絶対に省略しないでください。
+
 （最重要）データ行の各根拠コメントの中には、絶対に半角カンマ(,)を含めないでください。カンマは全角の「、」に置き換えてください。
 
 生徒名,総合評価,総合コメント,{labels_str}{extra_columns}
@@ -244,7 +245,8 @@ def evaluate_single_student(
     api_key: str,
     model_name: str = DEFAULT_MODEL,
     use_rubric_items: bool = False,
-    target_grade: str = "中学生"
+    target_grade: str = "中学生",
+    expected_headers: list = None
 ) -> tuple:
     """
     1名分の評価を行う。STOPボタン対応用の単一学生処理関数。
@@ -273,7 +275,7 @@ def evaluate_single_student(
             )
         )
         raw_text = response.text
-        parsed = _parse_gemini_csv(raw_text, name)
+        parsed = _parse_gemini_csv(raw_text, name, expected_headers)
         if parsed:
             return parsed, None
         else:
@@ -284,7 +286,7 @@ def evaluate_single_student(
         return {"生徒名": name, "総合評価": "0", "コメント": f"エラー: {str(e)[:50]}"}, err
 
 
-def _parse_gemini_csv(raw_text: str, student_name: str) -> dict:
+def _parse_gemini_csv(raw_text: str, student_name: str, expected_headers: list = None) -> dict:
     """GeminiのCSV出力テキストを解析してdictに変換。
 
     【設計方針】
@@ -324,11 +326,18 @@ def _parse_gemini_csv(raw_text: str, student_name: str) -> dict:
                     header_idx = i
                     break
 
-        if header_idx is None or header_idx + 1 >= len(all_rows):
+        if header_idx is None:
             return None
 
-        headers = [h.strip() for h in all_rows[header_idx]]
-        data    = [v.strip() for v in all_rows[header_idx + 1]]
+        # ── 1行しかない場合の救済（ヘッダー省略時） ──
+        if len(all_rows) == 1 and expected_headers:
+            headers = expected_headers
+            data = [v.strip() for v in all_rows[0]]
+        elif header_idx + 1 >= len(all_rows):
+            return None
+        else:
+            headers = [h.strip() for h in all_rows[header_idx]]
+            data    = [v.strip() for v in all_rows[header_idx + 1]]
 
         # ── 列数ズレの自動修復（引用符なしカンマ混入対策） ────────────
         if len(data) > len(headers):

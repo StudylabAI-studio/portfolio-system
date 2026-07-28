@@ -329,6 +329,7 @@ with tab2:
             # 1名ずつ処理して再描画
             if st.session_state.eval_queue and not st.session_state.stop_eval:
                 next_student = st.session_state.eval_queue[0]
+                expected_headers = st.session_state.get("eval_headers", None)
                 with st.spinner(f"💬 {next_student['name']} さんの評価を生成中..."):
                     import time
                     time.sleep(0.5) # レート制限対策
@@ -338,9 +339,14 @@ with tab2:
                         api_key=API_KEY,
                         model_name=selected_model,
                         use_rubric_items=use_rubric_items,
-                        target_grade=target_grade
+                        target_grade=target_grade,
+                        expected_headers=expected_headers
                     )
                 
+                # 初回の成功時にヘッダー構造を記憶しておく（AIが2人目以降でヘッダーを省略した場合の救済用）
+                if not expected_headers and result and "総合評価" in result:
+                    st.session_state.eval_headers = list(result.keys())
+
                 st.session_state.eval_results.append(result)
                 if err:
                     st.session_state.eval_errors.append(err)
@@ -377,6 +383,7 @@ with tab2:
                 st.session_state.eval_queue = list(target_students)
                 st.session_state.eval_running = True
                 st.session_state.stop_eval = False
+                st.session_state.eval_headers = None
                 st.rerun()
 
         # 結果表示・ダウンロード
