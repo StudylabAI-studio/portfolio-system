@@ -291,23 +291,44 @@
         {% endfor %}
       </div>
       
-      {% else %}
+            {% elif target_grade == '中学生' and extra_data.jhs_career %}
       <!-- 中学生向け：進路提案 -->
-      <div style="display: flex; flex-direction: column; gap: 20px;">
-        <div style="background: #FFFDF0; border: 1px solid #E0C070; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(212,175,55,0.1);">
-          <div style="font-size: 12px; color: #B8960C; font-weight: bold; margin-bottom: 5px; letter-spacing: 0.1em;">RECOMMENDED FACULTY</div>
-          <div style="font-size: 20px; font-weight: 800; color: #37474F; margin-bottom: 10px; border-bottom: 1px dashed #D4AF37; padding-bottom: 5px;">
-            おすすめの学部：{{ extra_data.recommended_faculty }}
-          </div>
-          <div style="font-size: 13px; color: #546E7A; line-height: 1.6;">{{ extra_data.faculty_reason }}</div>
+      <div style="display: flex; flex-direction: column; gap: 15px;">
+        <!-- タイトル -->
+        <div style="background: white; border: 1px solid #DDE3EE; border-radius: 12px; padding: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); text-align: center;">
+          <h3 style="color: #1565C0; margin: 0; font-size: 18px; font-weight: 800;">{{ extra_data.jhs_career.title }}</h3>
         </div>
 
-        <div style="background: #FFFDF0; border: 1px solid #E0C070; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(212,175,55,0.1);">
-          <div style="font-size: 12px; color: #B8960C; font-weight: bold; margin-bottom: 5px; letter-spacing: 0.1em;">RECOMMENDED JOB</div>
-          <div style="font-size: 20px; font-weight: 800; color: #37474F; margin-bottom: 10px; border-bottom: 1px dashed #D4AF37; padding-bottom: 5px;">
-            おすすめの職業：{{ extra_data.recommended_job }}
+        <!-- 強み -->
+        <div style="background: white; border: 1px solid #DDE3EE; border-radius: 12px; padding: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border-left: 4px solid #43A047;">
+          <div style="font-size: 13px; color: #2E7D32; font-weight: bold; margin-bottom: 8px;">✨ あなたの「強み」</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px;">
+            {% for kw in extra_data.jhs_career.strengths.keywords %}
+            <span style="background: #E8F5E9; color: #2E7D32; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: bold;">{{ kw }}</span>
+            {% endfor %}
           </div>
-          <div style="font-size: 13px; color: #546E7A; line-height: 1.6;">{{ extra_data.job_reason }}</div>
+          <div style="font-size: 12px; color: #455A8A; line-height: 1.6;">{{ extra_data.jhs_career.strengths.analysis }}</div>
+        </div>
+
+        <!-- 進路・環境 -->
+        <div style="background: white; border: 1px solid #DDE3EE; border-radius: 12px; padding: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border-left: 4px solid #1565C0;">
+          <div style="font-size: 13px; color: #1565C0; font-weight: bold; margin-bottom: 8px;">🚀 おすすめの環境・将来</div>
+          <div style="font-size: 12px; font-weight: bold; color: #1A2340; margin-bottom: 6px;">
+            おすすめの高校環境：<span style="color: #1565C0;">{{ extra_data.jhs_career.future_path.recommended_environment }}</span>
+          </div>
+          <div style="font-size: 12px; color: #455A8A; line-height: 1.6; margin-bottom: 8px;">{{ extra_data.jhs_career.future_path.advice }}</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+            <span style="font-size: 11px; color: #1565C0; font-weight: bold; padding-top: 4px;">将来の分野：</span>
+            {% for field in extra_data.jhs_career.future_path.future_fields %}
+            <span style="background: #E3F2FD; color: #1565C0; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: bold;">{{ field }}</span>
+            {% endfor %}
+          </div>
+        </div>
+
+        <!-- Next Action -->
+        <div style="background: #FFF8E1; border: 1px dashed #FFB300; border-radius: 12px; padding: 10px; text-align: center;">
+          <span style="font-size: 12px; color: #FF8F00; font-weight: bold;">💡 次のアクション：</span>
+          <span style="font-size: 12px; color: #455A8A;">{{ extra_data.jhs_career.next_action }}</span>
         </div>
       </div>
       {% endif %}

@@ -393,12 +393,18 @@ def _build_template_context(row: dict, template_type: str,
             "career_ranking": career_data
         }
         
-    else:  # 中学生
+    elif target_grade == "中学生":
+        import json
+        career_json_str = row.get("jhs_career_json", "")
+        career_data = {}
+        if career_json_str:
+            try:
+                career_data = json.loads(career_json_str)
+            except Exception as e:
+                print(f"JHS JSON Parse Error: {e}")
+                career_data = {}
         extra_data = {
-            "recommended_faculty": row.get("おすすめ学部", ""),
-            "faculty_reason": row.get("学部理由", ""),
-            "recommended_job": row.get("おすすめ職業", ""),
-            "job_reason": row.get("職業理由", ""),
+            "jhs_career": career_data
         }
 
     return {

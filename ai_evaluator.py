@@ -83,14 +83,9 @@ CSVの各列には以下の内容を必ず出力してください：
 ・鑑定書: なぜこのジョブとステータスになったのか、テキストの分析結果を交えたギルドマスターからの熱い鑑定メッセージ（200文字程度）
 """
     elif target_grade == "中学生":
-        extra_columns = ",おすすめ学部,学部理由,おすすめ職業,職業理由"
-        extra_example = ",情報学部,プログラミングへの関心が高いから,データサイエンティスト,分析力が活かせるから"
-        extra_instruction = f"""
-【{target_grade}向け特別分析】
-生徒の性格や特徴を分析し、将来の進路提案を行ってください。
-1. おすすめの大学学部（例：経済学部、情報学部など）とその理由
-2. おすすめの職業（例：システムエンジニア、企画営業など）とその理由
-"""
+        extra_columns = ""
+        extra_example = ""
+        extra_instruction = ""
     else:  # 高校生など
         extra_columns = ""
         extra_example = ""
@@ -281,14 +276,20 @@ def evaluate_single_student(
         raw_text = response.text
         parsed = _parse_gemini_csv(raw_text, name, expected_headers)
         if parsed:
-            # ＝＝＝ ここから高校生向けの第2段階（Two-Stage）評価 ＝＝＝
+            # ＝＝＝ ここから第2段階（Two-Stage）評価 ＝＝＝
             if target_grade == "高校生":
                 try:
                     hs_json_str = _generate_hs_career_json(name, logs, client, model_name)
                     parsed["hs_career_json"] = hs_json_str
                 except Exception as json_e:
-                    # JSON取得失敗時は既存機能を止めないようにログだけ出力
                     print(f"高校生JSON取得エラー({name}): {json_e}")
+            
+            elif target_grade == "中学生":
+                try:
+                    jhs_json_str = _generate_jhs_career_json(name, logs, client, model_name)
+                    parsed["jhs_career_json"] = jhs_json_str
+                except Exception as json_e:
+                    print(f"中学生JSON取得エラー({name}): {json_e}")
             # ＝＝＝ ここまで ＝＝＝
             
             return parsed, None
@@ -535,6 +536,68 @@ def _generate_hs_career_json(student_name: str, logs: list, client, model_name: 
 ・家政・生活科学部（家政・生活科学、食物学、被服学、住居学、児童学・子ども学）
 ・体育・健康科学部（体育・健康科学）
 ・芸術学部（美術、デザイン、工芸、音楽、芸術系その他（CG等含む））
+
+【生徒名】
+{student_name}
+
+【ライフログ】
+{log_block}
+"""
+    from google.genai import types
+    response = client.models.generate_content(
+        model=model_name,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            temperature=0.3,
+            top_p=0.95,
+        )
+    )
+    # Markdownブロックがあれば除去する
+    text = response.text.strip()
+    if text.startswith("```json"):
+        text = text[7:]
+    elif text.startswith("```"):
+        text = text[3:]
+    if text.endswith("```"):
+        text = text[:-3]
+    return text.strip()
+
+
+def _generate_jhs_career_json(student_name: str, logs: list, client, model_name: str) -> str:
+    """中学生向け第2段階評価：専門家としてJSONを出力する"""
+    log_block = ""
+    for i, log in enumerate(logs, 1):
+        theme = log.get("テーマ名", "（テーマなし）")
+        content = log.get("ライフログ内容", "")
+        if content and str(content) != "nan":
+            log_block += f"\n【ログ{i}】テーマ：{theme}\n{content}\n"
+
+    if not log_block.strip():
+        log_block = "（ライフログの記録なし）"
+
+    prompt = f"""あなたは、中学生の隠れた才能を見抜き、未来へのモチベーションを高める進路・才能開発の専門家です。
+システムから渡される生徒の日々のログ（日記、振り返り、興味関心の記録など）を深く分析し、その生徒ならではの「強み」と「最適な高校環境・進路」を導き出してください。
+
+### 指示・条件
+1. 単調な性格診断や、ありきたりな進路指導（例：「優しい性格です」「普通科が向いています」など）は絶対に避けること。
+2. 生徒のログから読み取れる具体的な行動や思考のクセを「強み」として評価すること。
+3. 【進路に関するアドバイス（advice）】は、この出力において最も重要な項目です。分析した強みを踏まえ、「どのような高校環境が合っているか」「将来どんな分野でその力が活きるか」を**200文字以上250文字程度**で、具体的かつ熱量を持って詳細に語りかけること。
+4. 以下のJSONフォーマットのみを出力すること。Markdownの装飾(```json など)や挨拶文は一切含めないこと。
+
+### 出力JSONフォーマット
+{{
+  "title": "ログから見えてきた、あなたのテーマ（※生徒のログの傾向を象徴するタイトルを20文字程度で作成）",
+  "strengths": {{
+    "keywords": ["強みを示すキーワード1", "強みを示すキーワード2", "強みを示すキーワード3"],
+    "analysis": "ここに100文字以上150文字程度で、生徒の強みに対する分析を出力します。ログの具体的なエピソードを必ず引用し、なぜそれが強みと言えるのかを伝えてください。"
+  }},
+  "future_path": {{
+    "recommended_environment": "〇〇を重視する高校・学習環境（例：理数探究に強い学校、生徒の自主性を重んじる自由な校風、など）",
+    "future_fields": ["将来の可能性が広がる分野1", "将来の可能性が広がる分野2"],
+    "advice": "ここに200文字以上250文字程度で、進路に関する詳細なアドバイスを出力します。分析した強みが、どのような高校環境（学習スタイル、校風、部活や探究の環境など）で最も伸びるのか、また将来の分野（IT、クリエイティブ、対人支援など）にどう繋がっていくのか、中学生が自分の未来に期待を持てるように具体的に解説してください。"
+  }},
+  "next_action": "明日からできる小さな挑戦や、調べてみると面白い探究テーマ（40文字程度）"
+}}
 
 【生徒名】
 {student_name}
