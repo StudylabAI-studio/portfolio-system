@@ -26,6 +26,16 @@ DEFAULT_MODEL = "gemini-3.1-flash-lite"
 
 FIXED_LABELS = ["自己管理", "思考力・探究心", "コミュニケーション", "主体性・行動力", "協働・共創力"]
 
+# ルーブリック未アップロード時に使用するデフォルトルーブリック
+DEFAULT_RUBRIC = """
+[評価基準（5項目）]
+・自己管理（1〜5点）：目標設定・時間管理・計画的な行動・振り返りの習慣
+・思考力・探究心（1〜5点）：疲問を持ち、深く考え、自ら調べる姿勢
+・コミュニケーション（1〜5点）：自分の考えを伝え、他者の意見を傾聴する力
+・主体性・行動力（1〜5点）：自ら考えて行動し、責任をもって取り組む姿勢
+・協働・共創力（1〜5点）：仒間と協力し、より良い成果を目指す力
+"""
+
 
 def build_evaluation_prompt(student_name: str, logs: list,
                             rubric_text: str, use_rubric_items: bool = False,
@@ -226,6 +236,52 @@ def evaluate_students_with_gemini(
         progress_callback(total, total, "完了")
 
     return results, errors
+
+
+def evaluate_single_student(
+    student: dict,
+    rubric_text: str,
+    api_key: str,
+    model_name: str = DEFAULT_MODEL,
+    use_rubric_items: bool = False,
+    target_grade: str = "中学生"
+) -> tuple:
+    """
+    1名分の評価を行う。STOPボタン対応用の単一学生処理関数。
+
+    Returns:
+        (result_dict, error_str_or_None)
+    """
+    client = genai.Client(api_key=api_key)
+    name = student["name"]
+    logs = student["logs"]
+
+    try:
+        prompt = build_evaluation_prompt(
+            student_name=name,
+            logs=logs,
+            rubric_text=rubric_text,
+            use_rubric_items=use_rubric_items,
+            target_grade=target_grade
+        )
+        response = client.models.generate_content(
+            model=model_name,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.3,
+                top_p=0.95,
+            )
+        )
+        raw_text = response.text
+        parsed = _parse_gemini_csv(raw_text, name)
+        if parsed:
+            return parsed, None
+        else:
+            err = f"{name}：CSV解析失敗 → {raw_text[:120]}"
+            return {"生徒名": name, "総合評価": "3.0", "コメント": "（解析エラー）"}, err
+    except Exception as e:
+        err = f"{name}：APIエラー → {str(e)}"
+        return {"生徒名": name, "総合評価": "0", "コメント": f"エラー: {str(e)[:50]}"}, err
 
 
 def _parse_gemini_csv(raw_text: str, student_name: str) -> dict:

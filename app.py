@@ -13,9 +13,11 @@ from dotenv import load_dotenv
 from prompt_builder import parse_ai_csv_output, FIXED_LABELS
 from pdf_builder import generate_pdfs_as_zip, generate_single_pdf_bytes
 from ai_evaluator import (
-    AVAILABLE_MODELS, DEFAULT_MODEL, group_logs_by_student,
-    evaluate_students_with_gemini, results_to_csv_bytes
+    AVAILABLE_MODELS, DEFAULT_MODEL, DEFAULT_RUBRIC,
+    group_logs_by_student, evaluate_students_with_gemini,
+    evaluate_single_student, results_to_csv_bytes
 )
+
 
 # .env からAPIキーを自動読込（ローカル環境用）
 load_dotenv(Path(__file__).parent / ".env")
@@ -78,6 +80,15 @@ if "eval_results" not in st.session_state:
     st.session_state.eval_results = []
 if "students_list" not in st.session_state:
     st.session_state.students_list = []
+if "eval_running" not in st.session_state:
+    st.session_state.eval_running = False
+if "eval_queue" not in st.session_state:
+    st.session_state.eval_queue = []
+if "eval_errors" not in st.session_state:
+    st.session_state.eval_errors = []
+if "stop_eval" not in st.session_state:
+    st.session_state.stop_eval = False
+
 
 # ─── サイドバー ───────────────────────────────────────────────
 with st.sidebar:
@@ -250,12 +261,14 @@ with tab1:
             except Exception as e:
                 st.error(f"ルーブリック読み込みエラー: {e}")
 
+    # ルーブリックは任意なのでブロックしない
     if not st.session_state.students_list:
         st.markdown("""
         <div class="warn-box">
-        ⬆️ まずライフログCSVとルーブリックをアップロードしてください。
+        ⬆️ まずライフログCSVをアップロードしてください。
         </div>
         """, unsafe_allow_html=True)
+
 
 # ════════════════════════════════════════════════════════════
 # Step 2：AI自動評価
@@ -265,19 +278,24 @@ with tab2:
 
     students_list = st.session_state.get("students_list", [])
     rubric_text = st.session_state.get("rubric_text", "")
+    
+    # ルーブリック未アップロードの場合はデフォルトを使用
+    effective_rubric = rubric_text if rubric_text.strip() else DEFAULT_RUBRIC
+    using_default_rubric = not rubric_text.strip()
 
     if not students_list:
         st.markdown('<div class="warn-box">⚠️ Step 1でライフログCSVを読み込んでください。</div>', unsafe_allow_html=True)
-    elif not rubric_text:
-        st.markdown('<div class="warn-box">⚠️ Step 1でルーブリックを読み込んでください。</div>', unsafe_allow_html=True)
     elif not (bool(API_KEY) and len(API_KEY) > 20 and not API_KEY.startswith("ここ")):
         st.markdown('<div class="warn-box">⚠️ .env ファイルに GEMINI_API_KEY を記入してアプリを再起動してください。</div>', unsafe_allow_html=True)
     else:
+        if using_default_rubric:
+            st.markdown('<div class="warn-box">📋 ルーブリック未読込 → 搭載されている「基本的な評価基準（5項目）」で評価します</div>', unsafe_allow_html=True)
+
         st.markdown(f"""
         <div class="info-box">
         🤖 <b>{AVAILABLE_MODELS[selected_model]}</b> で評価します。<br>
         対象：<b>{len(students_list)}名</b>　／　
-        評価軸：<b>{"ルーブリック準拠" if use_rubric_items else "固定5項目"}</b>
+        評価軸：<b>{"ルーブリック準拠" if use_rubric_items and not using_default_rubric else "固定5項目"}</b>
         </div>
         """, unsafe_allow_html=True)
 
@@ -292,58 +310,74 @@ with tab2:
             target_students = [s for s in students_list if s["name"] in selected_names] if selected_names else students_list
             st.caption(f"評価対象：{len(target_students)}名")
 
-        col_run, col_dl = st.columns([2, 1])
+        # ── 評価実行中（STOP可能UI） ────────────────────────────────
+        if st.session_state.get("eval_running", False):
+            done = len(st.session_state.eval_results)
+            total = done + len(st.session_state.eval_queue)
+            pct = int(done / total * 100) if total > 0 else 0
+            
+            st.progress(pct)
+            st.markdown(f"⏳ **評価中... {done}/{total} 名完了**")
 
-        with col_run:
-            run_btn = st.button(
-                f"🚀 AI評価を開始する（{len(target_students)}名）",
-                use_container_width=True,
-                type="primary"
-            )
+            # STOPボタン
+            if st.button("⏹️ 評価をSTOPする", type="secondary", use_container_width=True, key="stop_btn"):
+                st.session_state.stop_eval = True
+                st.session_state.eval_running = False
+                st.warning(f"⏹️ 評価を中断しました（{done}名分の結果は保持されています）")
+                st.rerun()
 
-        if run_btn:
-            progress_bar = st.progress(0)
-            status = st.empty()
-            log_area = st.empty()
-            log_messages = []
+            # 1名ずつ処理して再描画
+            if st.session_state.eval_queue and not st.session_state.stop_eval:
+                next_student = st.session_state.eval_queue[0]
+                with st.spinner(f"💬 {next_student['name']} さんの評価を生成中..."):
+                    import time
+                    time.sleep(0.5) # レート制限対策
+                    result, err = evaluate_single_student(
+                        student=next_student,
+                        rubric_text=effective_rubric,
+                        api_key=API_KEY,
+                        model_name=selected_model,
+                        use_rubric_items=use_rubric_items,
+                        target_grade=target_grade
+                    )
+                
+                st.session_state.eval_results.append(result)
+                if err:
+                    st.session_state.eval_errors.append(err)
+                
+                # キューから削除
+                st.session_state.eval_queue = st.session_state.eval_queue[1:]
 
-            def on_progress(current, total, name):
-                pct = int(current / total * 100) if total > 0 else 0
-                progress_bar.progress(pct)
-                if name != "完了":
-                    status.markdown(f"⏳ 評価中... **{name}** ({current+1}/{total})")
-                    log_messages.append(f"✓ {name} 完了" if current > 0 else f"▶ {name} 評価中...")
-                else:
-                    status.markdown("✅ 全員の評価が完了しました！")
-                log_area.text("\n".join(log_messages[-8:]))
+                # 完了判定
+                if not st.session_state.eval_queue:
+                    st.session_state.eval_running = False
+                    st.success(f"🎉 評価完了！{len(st.session_state.eval_results)}名分の評価結果が生成されました。")
+                    if st.session_state.eval_errors:
+                        with st.expander("⚠️ エラー詳細"):
+                            for e in st.session_state.eval_errors:
+                                st.warning(e)
+                
+                # 次の生徒へ（UIを更新させる）
+                st.rerun()
 
-            try:
-                results, errors = evaluate_students_with_gemini(
-                    students=target_students,
-                    rubric_text=rubric_text,
-                    api_key=API_KEY,
-                    model_name=selected_model,
-                    use_rubric_items=use_rubric_items,
-                    progress_callback=on_progress,
-                    target_grade=target_grade
+        # ── 評価待機中 ──────────────────────────────────────────────
+        else:
+            col_run, col_dl = st.columns([2, 1])
+            with col_run:
+                run_btn = st.button(
+                    f"🚀 AI評価を開始する（{len(target_students)}名）",
+                    use_container_width=True,
+                    type="primary"
                 )
-                st.session_state.eval_results = results
-                progress_bar.progress(100)
 
-                st.markdown(f"""
-                <div class="success-box">
-                🎉 評価完了！<b>{len(results)}名分</b>の評価結果が生成されました。
-                {f'<br>⚠️ エラー：{len(errors)}件' if errors else ''}
-                </div>
-                """, unsafe_allow_html=True)
-
-                if errors:
-                    with st.expander("⚠️ エラー詳細"):
-                        for e in errors:
-                            st.warning(e)
-
-            except Exception as e:
-                st.error(f"評価処理エラー: {traceback.format_exc()}")
+            if run_btn:
+                # 評価キューの初期化
+                st.session_state.eval_results = []
+                st.session_state.eval_errors = []
+                st.session_state.eval_queue = list(target_students)
+                st.session_state.eval_running = True
+                st.session_state.stop_eval = False
+                st.rerun()
 
         # 結果表示・ダウンロード
         if st.session_state.eval_results:
