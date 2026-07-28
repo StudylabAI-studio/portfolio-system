@@ -15,12 +15,13 @@ from google.genai import types
 
 # ─── モデル一覧（現在利用可能な最新API） ───────────────
 AVAILABLE_MODELS = {
-    "gemini-3.1-flash-lite": "[推奨] Gemini 3.1 Flash Lite - 超高速・最新モデル",
-    "gemini-2.5-flash":      "Gemini 2.5 Flash - 高精度・安定",
-    "gemini-3.1-pro-preview":"Gemini 3.1 Pro Preview - 最高精度",
+    "gemini-2.5-flash":         "[推奨] Gemini 2.5 Flash - 高速・高精度・安定",
+    "gemini-2.5-flash-lite-preview-06-17": "Gemini 2.5 Flash Lite - 超高速・軽量",
+    "gemini-2.5-pro":           "Gemini 2.5 Pro - 最高精度（低速）",
 }
 
-DEFAULT_MODEL = "gemini-3.1-flash-lite"
+DEFAULT_MODEL = "gemini-2.5-flash"
+
 
 FIXED_LABELS = ["自己管理", "思考力・探究心", "コミュニケーション", "主体性・行動力", "協働・共創力"]
 

@@ -60,17 +60,32 @@ def _html_to_pdf(html_content: str) -> bytes:
     _ensure_playwright_browsers()
     try:
         from playwright.sync_api import sync_playwright
-        with sync_playwright() as p:
-            browser = p.chromium.launch()
-            page = browser.new_page()
-            page.set_content(html_content, wait_until="networkidle")
-            page.wait_for_timeout(800)
-            pdf_bytes = page.pdf(
-                format='A4',
-                print_background=True,
-                margin={"top": "0", "bottom": "0", "left": "0", "right": "0"}
-            )
-            browser.close()
+
+        # 一時HTMLファイルに書き出してgoto()で読み込む（リソース読み込みのため）
+        with tempfile.NamedTemporaryFile(
+            suffix='.html', mode='w', encoding='utf-8', delete=False
+        ) as tmp:
+            tmp.write(html_content)
+            tmp_path = tmp.name
+
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch()
+                page = browser.new_page()
+                page.goto(f"file:///{tmp_path.replace(os.sep, '/')}", wait_until="networkidle")
+                page.wait_for_timeout(1500)  # フォント・チャート描画待ち
+                pdf_bytes = page.pdf(
+                    format='A4',
+                    print_background=True,
+                    margin={"top": "0", "bottom": "0", "left": "0", "right": "0"}
+                )
+                browser.close()
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+
         return pdf_bytes
     except ImportError:
         raise RuntimeError("Playwrightがインストールされていません。requirements.txtにplaywrightを追加してください。")
@@ -84,21 +99,33 @@ def _html_to_pdf(html_content: str) -> bytes:
                 )
                 # 再試行
                 from playwright.sync_api import sync_playwright
-                with sync_playwright() as p:
-                    browser = p.chromium.launch()
-                    page = browser.new_page()
-                    page.set_content(html_content, wait_until="networkidle")
-                    page.wait_for_timeout(800)
-                    pdf_bytes = page.pdf(
-                        format='A4',
-                        print_background=True,
-                        margin={"top": "0", "bottom": "0", "left": "0", "right": "0"}
-                    )
-                    browser.close()
+                with tempfile.NamedTemporaryFile(
+                    suffix='.html', mode='w', encoding='utf-8', delete=False
+                ) as tmp:
+                    tmp.write(html_content)
+                    tmp_path = tmp.name
+                try:
+                    with sync_playwright() as p:
+                        browser = p.chromium.launch()
+                        page = browser.new_page()
+                        page.goto(f"file:///{tmp_path.replace(os.sep, '/')}", wait_until="networkidle")
+                        page.wait_for_timeout(1500)
+                        pdf_bytes = page.pdf(
+                            format='A4',
+                            print_background=True,
+                            margin={"top": "0", "bottom": "0", "left": "0", "right": "0"}
+                        )
+                        browser.close()
+                finally:
+                    try:
+                        os.unlink(tmp_path)
+                    except Exception:
+                        pass
                 return pdf_bytes
             except Exception as e2:
                 raise RuntimeError(f"PDF生成に失敗しました（Chromiumインストール後も失敗）: {e2}")
         raise RuntimeError(f"PDF生成に失敗しました: {e}")
+
 
 
 
