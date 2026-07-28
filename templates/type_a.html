@@ -168,7 +168,7 @@
     border-left: 4px solid #66BB6A;
   }
   .comment-title { font-size: 11px; font-weight: 700; color: #2E7D32; margin-bottom: 5px; }
-  .comment-text { font-size: 10.5px; color: #37474F; line-height: 1.75; }
+  .comment-text { font-size: 9.5px; color: #37474F; line-height: 1.7; }
 
   /* フッター */
   .footer {
@@ -196,13 +196,13 @@
 <body>
 {% set sc_len = score_items|length %}
 {% if sc_len <= 3 %}
-  {% set sc_gap = "18px" %}{% set sc_pad = "12px 14px" %}{% set sc_reason_size = "9px" %}
+  {% set sc_gap = "10px" %}{% set sc_pad = "9px 14px" %}{% set sc_reason_size = "8px" %}
 {% elif sc_len == 4 %}
-  {% set sc_gap = "12px" %}{% set sc_pad = "10px 12px" %}{% set sc_reason_size = "9px" %}
-{% elif sc_len == 5 %}
   {% set sc_gap = "8px" %}{% set sc_pad = "8px 12px" %}{% set sc_reason_size = "8px" %}
+{% elif sc_len == 5 %}
+  {% set sc_gap = "6px" %}{% set sc_pad = "7px 12px" %}{% set sc_reason_size = "7.5px" %}
 {% elif sc_len == 6 %}
-  {% set sc_gap = "5px" %}{% set sc_pad = "5px 10px" %}{% set sc_reason_size = "7.5px" %}
+  {% set sc_gap = "4px" %}{% set sc_pad = "5px 10px" %}{% set sc_reason_size = "7px" %}
 {% else %}
   {% set sc_gap = "3px" %}{% set sc_pad = "4px 8px" %}{% set sc_reason_size = "7px" %}
 {% endif %}
