@@ -147,8 +147,12 @@
     padding: {{ sc_pad }};
     padding-left: 14px; padding-right: 14px;
     box-shadow: 0 1px 4px rgba(21,101,192,0.08);
+    flex: 1;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
   }
-  .score-item-header { display: flex; justify-content: space-between; align-items: center; }
+  .score-item-header { display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
   .score-label { font-size: 11px; font-weight: 700; color: #37474F; }
   .score-val { font-size: 13px; font-weight: 700; color: #1565C0; }
   .score-bar-bg {
