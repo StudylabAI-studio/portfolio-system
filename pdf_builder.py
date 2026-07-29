@@ -489,7 +489,8 @@ def generate_pdfs_as_zip(students_data: list,
                          logo_position: str = "center",
                          custom_layout: dict = None,
                          target_grade: str = "中学生",
-                         progress_callback=None) -> bytes:
+                         progress_callback=None,
+                         csv_bytes: bytes = None) -> bytes:
     """
     複数の生徒データからPDFを並列生成し、ZIPファイルのバイト列を返す。
 
@@ -502,6 +503,7 @@ def generate_pdfs_as_zip(students_data: list,
         custom_layout: Type D用のカスタムレイアウト設定（dict）
         target_grade: 対象学年
         progress_callback: 進捗通知用コールバック関数 callback(done: int, total: int, name: str)
+        csv_bytes: 一緒にZIPに含めるCSVデータのバイト列（省略可）
 
     Returns:
         ZIPファイルのバイト列
@@ -539,6 +541,9 @@ def generate_pdfs_as_zip(students_data: list,
     # 元の順番でZIPに格納
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        if csv_bytes:
+            zf.writestr("evaluation_results.csv", csv_bytes)
+            
         for student_name, pdf_bytes, err_msg in results:
             if pdf_bytes:
                 safe_name = "".join(c for c in student_name if c not in r'\/:*?"<>|')

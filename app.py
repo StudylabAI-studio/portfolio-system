@@ -591,6 +591,8 @@ with tab3:
                         pdf_progress.progress(pct, text=f"⏳ PDF生成中… {done}/{total}名完了")
                         pdf_status.caption(f"✅ 完了：{name}")
 
+                    csv_bytes_for_zip = results_to_csv_bytes(eval_results)
+                    
                     zip_bytes = generate_pdfs_as_zip(
                         students_data=eval_results,
                         template_type=template_type,
@@ -598,7 +600,8 @@ with tab3:
                         logo_bytes=logo_bytes,
                         logo_position=logo_pos_key,
                         target_grade=target_grade,
-                        progress_callback=_pdf_callback
+                        progress_callback=_pdf_callback,
+                        csv_bytes=csv_bytes_for_zip
                     )
                     pdf_progress.progress(1.0, text="✅ PDF生成完了！")
                     pdf_status.empty()
