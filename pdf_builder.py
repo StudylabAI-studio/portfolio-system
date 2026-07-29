@@ -331,9 +331,10 @@ def _build_template_context(row: dict, template_type: str,
 
     # ── 根拠コメントをPythonレベルで文字数制限（PDF溢れ防止）──
     # 項目数が少ないほど1項目あたりのスペースが大きいので多めに許容
+    # 項目数に応じた制限: 1行約22文字と想定
     _reason_char_limit = {
-        1: 350, 2: 280, 3: 200, 4: 155, 5: 120, 6: 90
-    }.get(len(score_items), 75)
+        1: 250, 2: 200, 3: 150, 4: 110, 5: 90, 6: 75
+    }.get(len(score_items), 50)
     for _si in score_items:
         if _si["reason"] and len(_si["reason"]) > _reason_char_limit:
             _si["reason"] = _si["reason"][:_reason_char_limit].rstrip() + "…"
