@@ -147,12 +147,8 @@
     padding: {{ sc_pad }};
     padding-left: 14px; padding-right: 14px;
     box-shadow: 0 1px 4px rgba(21,101,192,0.08);
-    flex: 1;
-    display: flex; flex-direction: column;
-    overflow: hidden;
-    min-height: 0;
   }
-  .score-item-header { display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+  .score-item-header { display: flex; justify-content: space-between; align-items: center; }
   .score-label { font-size: 11px; font-weight: 700; color: #37474F; }
   .score-val { font-size: 13px; font-weight: 700; color: #1565C0; }
   .score-bar-bg {
@@ -170,9 +166,10 @@
   .score-reason {
     font-size: {{ sc_reason_size }}; color: #546E7A; line-height: 1.5;
     text-align: justify; margin-top: 2px;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: {{ sc_line_clamp }};
     overflow: hidden;
-    flex: 1;
-    min-height: 0;
   }
 
   /* コメント欄 */
@@ -212,15 +209,15 @@
 <body>
 {% set sc_len = score_items|length %}
 {% if sc_len <= 3 %}
-  {% set sc_gap = "10px" %}{% set sc_pad = "9px 14px" %}{% set sc_reason_size = "8px" %}
+  {% set sc_gap = "10px" %}{% set sc_pad = "9px 14px" %}{% set sc_reason_size = "8px" %}{% set sc_line_clamp = 7 %}
 {% elif sc_len == 4 %}
-  {% set sc_gap = "8px" %}{% set sc_pad = "8px 12px" %}{% set sc_reason_size = "8px" %}
+  {% set sc_gap = "8px" %}{% set sc_pad = "8px 12px" %}{% set sc_reason_size = "8px" %}{% set sc_line_clamp = 5 %}
 {% elif sc_len == 5 %}
-  {% set sc_gap = "6px" %}{% set sc_pad = "7px 12px" %}{% set sc_reason_size = "7.5px" %}
+  {% set sc_gap = "6px" %}{% set sc_pad = "7px 12px" %}{% set sc_reason_size = "7.5px" %}{% set sc_line_clamp = 4 %}
 {% elif sc_len == 6 %}
-  {% set sc_gap = "4px" %}{% set sc_pad = "5px 10px" %}{% set sc_reason_size = "7px" %}
+  {% set sc_gap = "4px" %}{% set sc_pad = "5px 10px" %}{% set sc_reason_size = "7px" %}{% set sc_line_clamp = 3 %}
 {% else %}
-  {% set sc_gap = "3px" %}{% set sc_pad = "4px 8px" %}{% set sc_reason_size = "7px" %}
+  {% set sc_gap = "3px" %}{% set sc_pad = "4px 8px" %}{% set sc_reason_size = "7px" %}{% set sc_line_clamp = 2 %}
 {% endif %}
 
   {% if logo_b64 and logo_position == 'center' %}
