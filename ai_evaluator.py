@@ -50,6 +50,19 @@ def build_evaluation_prompt(
     logs = [{"テーマ名": ..., "ライフログ内容": ..., "投稿日時": ...}, ...]
     target_grade に応じて、RPGステータスや進路提案のカラムを付与する。
     """
+    # 評価項目数を算出し、PDF枠に100%収まる上限文字数を決定する
+    if expected_headers:
+        # 生徒名,総合評価,総合コメント を引いた残りのペア数
+        num_items = max(1, (len(expected_headers) - 3) // 2)
+    else:
+        num_items = len(FIXED_LABELS)
+        
+    char_limit = {
+        1: 250, 2: 200, 3: 150, 4: 110, 5: 90, 6: 75
+    }.get(num_items, 50)
+    
+    char_limit_instruction = f"【各項目の根拠コメントの書き方（必ず{char_limit}文字以内に収めること）】"
+
     log_block = ""
     for i, log in enumerate(logs, 1):
         theme = log.get("テーマ名", "（テーマなし）")
@@ -184,7 +197,7 @@ CSVの各列には以下の内容を必ず出力してください：
 - 今後さらに伸ばすための具体的なポイントやアドバイスを2〜3点入れる
 - 応援や期待の気持ちを込めた締めの言葉で終える
 
-【各項目の根拠コメントの書き方（200文字以上）】
+{char_limit_instruction}
 - 必ずログの文章を「」で引用して根拠を示すこと
 - 引用後の解釈・評価は、以下の多様な表現からランダムに使い分けること（毎回同じ言い回しは避ける）：
   ・「〇〇と記録していますね。これは△△の力が表れている証拠です」
