@@ -206,17 +206,38 @@
 </style>
 </head>
 <body>
+{% set ns = namespace(max_len=0) %}
+{% for item in score_items %}
+  {% if item.reason|length > ns.max_len %}
+    {% set ns.max_len = item.reason|length %}
+  {% endif %}
+{% endfor %}
+{% set max_reason_len = ns.max_len %}
+
 {% set sc_len = score_items|length %}
 {% if sc_len <= 3 %}
-  {% set sc_gap = "6px" %}{% set sc_pad = "8px 14px" %}{% set sc_reason_size = "7.5px" %}
+  {% set sc_gap = "6px" %}{% set sc_pad = "8px 14px" %}
+  {% if max_reason_len > 180 %}{% set sc_reason_size = "6.5px" %}
+  {% elif max_reason_len > 150 %}{% set sc_reason_size = "7px" %}
+  {% else %}{% set sc_reason_size = "7.5px" %}{% endif %}
 {% elif sc_len == 4 %}
-  {% set sc_gap = "5px" %}{% set sc_pad = "6px 12px" %}{% set sc_reason_size = "7px" %}
+  {% set sc_gap = "5px" %}{% set sc_pad = "6px 12px" %}
+  {% if max_reason_len > 130 %}{% set sc_reason_size = "6.5px" %}
+  {% elif max_reason_len > 110 %}{% set sc_reason_size = "7px" %}
+  {% else %}{% set sc_reason_size = "7.5px" %}{% endif %}
 {% elif sc_len == 5 %}
-  {% set sc_gap = "4px" %}{% set sc_pad = "5px 10px" %}{% set sc_reason_size = "6.5px" %}
+  {% set sc_gap = "4px" %}{% set sc_pad = "5px 10px" %}
+  {% if max_reason_len > 110 %}{% set sc_reason_size = "6px" %}
+  {% elif max_reason_len > 90 %}{% set sc_reason_size = "6.5px" %}
+  {% else %}{% set sc_reason_size = "7px" %}{% endif %}
 {% elif sc_len == 6 %}
-  {% set sc_gap = "3px" %}{% set sc_pad = "4px 8px" %}{% set sc_reason_size = "6.5px" %}
+  {% set sc_gap = "3px" %}{% set sc_pad = "4px 8px" %}
+  {% if max_reason_len > 90 %}{% set sc_reason_size = "6px" %}
+  {% else %}{% set sc_reason_size = "6.5px" %}{% endif %}
 {% else %}
-  {% set sc_gap = "2px" %}{% set sc_pad = "3px 8px" %}{% set sc_reason_size = "6px" %}
+  {% set sc_gap = "2px" %}{% set sc_pad = "3px 8px" %}
+  {% if max_reason_len > 60 %}{% set sc_reason_size = "5.5px" %}
+  {% else %}{% set sc_reason_size = "6px" %}{% endif %}
 {% endif %}
 
   {% if logo_b64 and logo_position == 'center' %}
