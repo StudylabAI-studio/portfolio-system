@@ -221,31 +221,31 @@
 {% set sc_len = score_items|length %}
 {% if sc_len <= 3 %}
   {% set sc_gap = "4px" %}{% set sc_pad = "6px 12px" %}
-  {% if max_reason_len > 150 %}{% set sc_reason_size = "5.5px" %}
-  {% elif max_reason_len > 130 %}{% set sc_reason_size = "6px" %}
-  {% elif max_reason_len > 110 %}{% set sc_reason_size = "6.5px" %}
-  {% else %}{% set sc_reason_size = "7px" %}{% endif %}
+  {% if max_reason_len > 150 %}{% set sc_reason_size = "4.5px" %}
+  {% elif max_reason_len > 130 %}{% set sc_reason_size = "5px" %}
+  {% elif max_reason_len > 110 %}{% set sc_reason_size = "5.5px" %}
+  {% else %}{% set sc_reason_size = "6px" %}{% endif %}
 {% elif sc_len == 4 %}
   {% set sc_gap = "3px" %}{% set sc_pad = "5px 10px" %}
-  {% if max_reason_len > 130 %}{% set sc_reason_size = "5px" %}
-  {% elif max_reason_len > 110 %}{% set sc_reason_size = "5.5px" %}
-  {% elif max_reason_len > 90 %}{% set sc_reason_size = "6px" %}
-  {% else %}{% set sc_reason_size = "6.5px" %}{% endif %}
+  {% if max_reason_len > 130 %}{% set sc_reason_size = "4px" %}
+  {% elif max_reason_len > 110 %}{% set sc_reason_size = "4.5px" %}
+  {% elif max_reason_len > 90 %}{% set sc_reason_size = "5px" %}
+  {% else %}{% set sc_reason_size = "5.5px" %}{% endif %}
 {% elif sc_len == 5 %}
   {% set sc_gap = "2px" %}{% set sc_pad = "4px 8px" %}
-  {% if max_reason_len > 110 %}{% set sc_reason_size = "5px" %}
-  {% elif max_reason_len > 90 %}{% set sc_reason_size = "5.5px" %}
-  {% else %}{% set sc_reason_size = "6px" %}{% endif %}
+  {% if max_reason_len > 110 %}{% set sc_reason_size = "4px" %}
+  {% elif max_reason_len > 90 %}{% set sc_reason_size = "4.5px" %}
+  {% else %}{% set sc_reason_size = "5px" %}{% endif %}
 {% elif sc_len == 6 %}
   {% set sc_gap = "2px" %}{% set sc_pad = "3px 6px" %}
-  {% if max_reason_len > 90 %}{% set sc_reason_size = "4.5px" %}
-  {% elif max_reason_len > 70 %}{% set sc_reason_size = "5px" %}
-  {% else %}{% set sc_reason_size = "5.5px" %}{% endif %}
+  {% if max_reason_len > 90 %}{% set sc_reason_size = "3.5px" %}
+  {% elif max_reason_len > 70 %}{% set sc_reason_size = "4px" %}
+  {% else %}{% set sc_reason_size = "4.5px" %}{% endif %}
 {% else %}
   {% set sc_gap = "1px" %}{% set sc_pad = "2px 4px" %}
-  {% if max_reason_len > 70 %}{% set sc_reason_size = "4.5px" %}
-  {% elif max_reason_len > 50 %}{% set sc_reason_size = "5px" %}
-  {% else %}{% set sc_reason_size = "5.5px" %}{% endif %}
+  {% if max_reason_len > 70 %}{% set sc_reason_size = "3.5px" %}
+  {% elif max_reason_len > 50 %}{% set sc_reason_size = "4px" %}
+  {% else %}{% set sc_reason_size = "4.5px" %}{% endif %}
 {% endif %}
 
   {% if logo_b64 and logo_position == 'center' %}
