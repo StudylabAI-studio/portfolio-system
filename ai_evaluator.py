@@ -61,7 +61,8 @@ def build_evaluation_prompt(
         1: 250, 2: 200, 3: 150, 4: 110, 5: 90, 6: 75
     }.get(num_items, 50)
     
-    char_limit_instruction = f"【各項目の根拠コメントの書き方（必ず{char_limit}文字以内に収めること）】"
+    min_limit = int(char_limit * 0.85)
+    char_limit_instruction = f"【各項目の根拠コメントの書き方（必ず{char_limit}文字を上限とし、できる限り上限に近い {min_limit}〜{char_limit}文字 のボリュームで詳細に書くこと）】"
 
     log_block = ""
     for i, log in enumerate(logs, 1):
