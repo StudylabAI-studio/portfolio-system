@@ -329,6 +329,15 @@ def _build_template_context(row: dict, template_type: str,
             "reason": item["reason"]
         })
 
+    # ── 根拠コメントをPythonレベルで文字数制限（PDF溢れ防止）──
+    # 項目数が少ないほど1項目あたりのスペースが大きいので多めに許容
+    _reason_char_limit = {
+        1: 350, 2: 280, 3: 200, 4: 155, 5: 120, 6: 90
+    }.get(len(score_items), 75)
+    for _si in score_items:
+        if _si["reason"] and len(_si["reason"]) > _reason_char_limit:
+            _si["reason"] = _si["reason"][:_reason_char_limit].rstrip() + "…"
+
     # レーダーチャート生成
     is_premium = "premium" in template_type.lower()
     if is_premium:
