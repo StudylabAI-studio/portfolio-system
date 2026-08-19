@@ -101,6 +101,20 @@ CSVの各列には以下の内容を必ず出力してください：
 ・スキル1効果〜2効果: その効果の解説（テキストの「〜〜」という言葉から分析。〇〇の効果がある）
 ・鑑定書: なぜこのジョブとステータスになったのか、テキストの分析結果を交えたギルドマスターからの熱い鑑定メッセージ（200文字程度）
 """
+    elif target_grade == "中高一貫中学校":
+        extra_columns = ""
+        extra_example = ""
+        extra_instruction = """
+【中高一貫中学校向け評価の方針（必ず守ること）】
+この生徒は中高一貫校に通う中学生です。高校への進学先はすでに決まっており、受験の心配がない環境にいます。
+以下の方針を必ず守って評価・コメントを作成してください。
+- スコアは全体的にやや高め（甘め）の傾向で採点し、成長を後押しする姿勢を示すこと
+- 「できていないこと」より「伸びているところ・伸びしろ」に焦点を当てること
+- 改善点や課題も「次のステップ」「さらに伸びるヒント」として前向きに表現すること
+- ネガティブな表現・批判的な表現は一切使わないこと
+- 総合コメントは必ず励まし・応援・期待の言葉で締めくくること
+- 中学生という成長途中の年齢であることを念頭に、温かみのある言葉づかいで記述すること
+"""
     elif target_grade == "中学生":
         extra_columns = ""
         extra_example = ""
@@ -344,6 +358,13 @@ def evaluate_single_student(
                     parsed["jhs_career_json"] = jhs_json_str
                 except Exception as json_e:
                     print(f"中学生JSON取得エラー({name}): {json_e}")
+
+            elif target_grade == "中高一貫中学校":
+                try:
+                    integrated_json_str = _generate_integrated_jhs_career_json(name, logs, client, model_name)
+                    parsed["integrated_jhs_career_json"] = integrated_json_str
+                except Exception as json_e:
+                    print(f"中高一貫中学校JSON取得エラー({name}): {json_e}")
             # ＝＝＝ ここまで ＝＝＝
             
             return parsed, None
@@ -561,7 +582,7 @@ def results_to_csv_bytes(results: list) -> bytes:
     if not results:
         return b""
 
-    SPECIAL_KEYS = {"hs_career_json", "jhs_career_json"}
+    SPECIAL_KEYS = {"hs_career_json", "jhs_career_json", "integrated_jhs_career_json"}
 
     # ── 1人目の列構造を正式な列リストとして確定 ──
     first = results[0]
@@ -750,6 +771,71 @@ def _generate_jhs_career_json(student_name: str, logs: list, client, model_name:
         )
     )
     # Markdownブロックがあれば除去する
+    text = response.text.strip()
+    if text.startswith("```json"):
+        text = text[7:]
+    elif text.startswith("```"):
+        text = text[3:]
+    if text.endswith("```"):
+        text = text[:-3]
+    return text.strip()
+
+
+def _generate_integrated_jhs_career_json(student_name: str, logs: list, client, model_name: str) -> str:
+    """中高一貫中学校向け第2段階評価：高校選びは含まず、学校生活での才能活用と将来の可能性にフォーカスしたJSONを出力する"""
+    log_block = ""
+    for i, log in enumerate(logs, 1):
+        theme = log.get("テーマ名", "（テーマなし）")
+        content = log.get("ライフログ内容", "")
+        if content and str(content) != "nan":
+            log_block += f"\n【ログ{i}】テーマ：{theme}\n{content}\n"
+
+    if not log_block.strip():
+        log_block = "（ライフログの記録なし）"
+
+    prompt = f"""あなたは、中高一貫校の中学生の才能を見抜き、充実した学校生活と豊かな未来を応援する、情熱的な教育コーチです。
+この生徒はすでに進学先の高校が決まっています。そのため「どの高校に行くか」「受験対策」といった内容は一切不要です。
+生徒の日々のログを深く分析し、「今の学校生活の中でいかにその才能を活かすか」「将来どんな分野でその力が輝くか」を温かく、前向きに伝えてください。
+
+### 指示・条件
+1. 「受験」「高校選び」「入試」に関する内容は絶対に含めないこと。
+2. ありきたりな性格診断（例：「優しい性格です」）は避け、ログの具体的なエピソードから強みを読み取ること。
+3. 生徒全員が同じ学校行事について書いている場合でも、一人ひとりの「着眼点」「感情の動き」「役割」の違いを鋭く捉え、多様な強みを提案すること。
+4. 【学校生活での活かし方（recommended_environment）】は、今の中高一貫校の学校生活（部活・探究活動・委員会・行事・課外活動・自主学習など）の中で、この生徒がどんな活動・環境に取り組むと才能がさらに伸びるかを具体的に書くこと。
+5. 【進路・将来へのアドバイス（advice）】は最も重要な項目です。**200文字以上250文字程度**で、生徒の強みが将来どんな分野・職業に繋がるのか、中学生が自分の未来にワクワクできるよう、温かく前向きな言葉で具体的に語りかけること。
+6. 評価全体を通じて励まし・肯定・応援のトーンを貫くこと。ネガティブな表現は一切使わないこと。
+7. 以下のJSONフォーマットのみを出力すること。Markdownの装飾(```json など)や挨拶文は一切含めないこと。
+
+### 出力JSONフォーマット
+{{
+  "title": "ログから見えてきた、あなたのテーマ（※生徒のログの傾向を象徴するタイトルを20文字程度で作成）",
+  "strengths": {{
+    "keywords": ["強みを示すキーワード1", "強みを示すキーワード2", "強みを示すキーワード3"],
+    "analysis": "ここに100文字以上150文字程度で、生徒の強みに対する分析を出力します。ログの具体的なエピソードを必ず引用し、なぜそれが強みと言えるのかを前向きに伝えてください。"
+  }},
+  "future_path": {{
+    "recommended_environment": "今の学校生活で特に取り組んでほしい活動・環境（例：探究学習や理科系クラブ、生徒会・イベント企画、ボランティア活動など）",
+    "future_fields": ["将来の可能性が広がる分野1", "将来の可能性が広がる分野2"],
+    "advice": "ここに200文字以上250文字程度で、将来への前向きなアドバイスを出力します。強みがどんな分野・仕事に繋がるか、どうすればさらに伸びるかを中学生に届く言葉で語りかけてください。"
+  }},
+  "next_action": "明日からできる小さな挑戦や、調べてみると面白い探究テーマ（40文字程度）"
+}}
+
+【生徒名】
+{student_name}
+
+【ライフログ】
+{log_block}
+"""
+    from google.genai import types
+    response = client.models.generate_content(
+        model=model_name,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            temperature=0.7,
+            top_p=0.95,
+        )
+    )
     text = response.text.strip()
     if text.startswith("```json"):
         text = text[7:]

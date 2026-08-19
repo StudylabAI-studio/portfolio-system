@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
@@ -315,7 +315,7 @@
         {% endfor %}
       </div>
       
-            {% elif target_grade == '中学生' and extra_data.jhs_career %}
+            {% elif (target_grade == '中学生' or target_grade == '中高一貫中学校') and extra_data.jhs_career %}
       <!-- 中学生向け：進路提案 -->
       <div style="display: flex; flex-direction: column; gap: 12px;">
         <!-- タイトル -->

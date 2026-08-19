@@ -413,6 +413,20 @@ def _build_template_context(row: dict, template_type: str,
             "jhs_career": career_data
         }
 
+    elif target_grade == "中高一貫中学校":
+        import json
+        career_json_str = row.get("integrated_jhs_career_json", "")
+        career_data = {}
+        if career_json_str:
+            try:
+                career_data = json.loads(career_json_str)
+            except Exception as e:
+                print(f"Integrated JHS JSON Parse Error: {e}")
+                career_data = {}
+        extra_data = {
+            "jhs_career": career_data  # 中学生テンプレートと同じキーで流用
+        }
+
     return {
         "student_name": student_name,
         "total_score": total_score,

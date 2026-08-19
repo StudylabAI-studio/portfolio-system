@@ -1,4 +1,7 @@
 ﻿import os
+from dotenv import load_dotenv
+load_dotenv('.env')
+
 import google.genai as genai
 from google.genai import types
 from ai_evaluator import build_evaluation_prompt, _parse_gemini_csv
